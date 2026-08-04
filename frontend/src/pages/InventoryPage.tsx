@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import api from '@/services/api';
+import { showToast } from '@/lib/toast';
+import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,7 +20,16 @@ export function InventoryPage() {
   const [selected, setSelected] = useState<InventoryItem | null>(null);
   const [form, setForm] = useState({ name: '', unit: '', cost_per_unit: '', current_stock: '', quantity: '', reference: '', note: '' });
 
-  const load = () => { api.get('/inventory').then((r) => { setItems(r.data); setLoading(false); }); };
+  const load = async () => {
+    try {
+      const r = await api.get('/inventory');
+      setItems(r.data);
+    } catch {
+      showToast('Failed to load inventory', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
   useEffect(() => { load(); }, []);
 
   const openDialog = (type: typeof dialogType, item?: InventoryItem) => {
@@ -30,15 +41,19 @@ export function InventoryPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (dialogType === 'create') { await api.post('/inventory', { ...form, cost_per_unit: Number(form.cost_per_unit), current_stock: Number(form.current_stock || 0) }); }
-    else if (dialogType === 'stockin' && selected) { await api.post('/inventory/stock-in', { inventory_item_id: selected.id, quantity: Number(form.quantity), reference: form.reference, note: form.note }); }
-    else if (dialogType === 'adjust' && selected) { await api.post(`/inventory/${selected.id}/adjust`, { quantity: Number(form.quantity), note: form.note }); }
-    else if (dialogType === 'expire' && selected) { await api.post(`/inventory/${selected.id}/expire`, { quantity: Number(form.quantity), note: form.note }); }
-    setDialogOpen(false);
-    load();
+    try {
+      if (dialogType === 'create') { await api.post('/inventory', { ...form, cost_per_unit: Number(form.cost_per_unit), current_stock: Number(form.current_stock || 0) }); showToast('Inventory item created', 'success'); }
+      else if (dialogType === 'stockin' && selected) { await api.post('/inventory/stock-in', { inventory_item_id: selected.id, quantity: Number(form.quantity), reference: form.reference, note: form.note }); showToast('Stock added', 'success'); }
+      else if (dialogType === 'adjust' && selected) { await api.post(`/inventory/${selected.id}/adjust`, { quantity: Number(form.quantity), note: form.note }); showToast('Stock adjusted', 'success'); }
+      else if (dialogType === 'expire' && selected) { await api.post(`/inventory/${selected.id}/expire`, { quantity: Number(form.quantity), note: form.note }); showToast('Stock expired', 'success'); }
+      setDialogOpen(false);
+      load();
+    } catch {
+      showToast('Failed to update inventory', 'error');
+    }
   };
 
-  if (loading) return <div className="p-6 text-gray-500">Loading...</div>;
+  if (loading) return <div className="flex items-center justify-center p-6"><Spinner className="size-6" /></div>;
 
   return (
     <div className="p-6">
@@ -66,7 +81,9 @@ export function InventoryPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {items.map((item) => (
+              {items.length === 0 ? (
+                <TableRow><TableCell colSpan={6} className="text-center text-gray-400">No inventory items found</TableCell></TableRow>
+              ) : items.map((item) => (
                 <TableRow key={item.id}>
                   <TableCell className="font-medium">{item.name}</TableCell>
                   <TableCell>{item.unit}</TableCell>
@@ -96,7 +113,9 @@ export function InventoryPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {items.filter((i) => i.current_stock < 10).map((item) => (
+              {items.filter((i) => i.current_stock < 10).length === 0 ? (
+                <TableRow><TableCell colSpan={3} className="text-center text-gray-400">No low stock items</TableCell></TableRow>
+              ) : items.filter((i) => i.current_stock < 10).map((item) => (
                 <TableRow key={item.id}>
                   <TableCell className="font-medium">{item.name}</TableCell>
                   <TableCell>{item.unit}</TableCell>

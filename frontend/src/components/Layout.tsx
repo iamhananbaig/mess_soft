@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -18,6 +19,7 @@ export function Layout() {
   const { user, logout, hasPermission } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const filteredNav = navItems.filter((item) => hasPermission(item.permission));
 
@@ -26,9 +28,28 @@ export function Layout() {
     navigate('/login');
   };
 
+  const handleNav = (path: string) => {
+    navigate(path);
+    setSidebarOpen(false);
+  };
+
   return (
     <div className="min-h-screen flex">
-      <aside className="w-56 bg-gray-900 text-white flex flex-col">
+      {/* Mobile overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-30 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar */}
+      <aside
+        className={cn(
+          'w-56 bg-gray-900 text-white flex flex-col fixed inset-y-0 left-0 z-40 transition-transform lg:translate-x-0 lg:static',
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+        )}
+      >
         <div className="p-4">
           <h1 className="text-lg font-bold">Canteen POS</h1>
         </div>
@@ -37,7 +58,7 @@ export function Layout() {
           {filteredNav.map((item) => (
             <button
               key={item.path}
-              onClick={() => navigate(item.path)}
+              onClick={() => handleNav(item.path)}
               className={cn(
                 'w-full text-left px-3 py-2 rounded-md text-sm transition-colors',
                 location.pathname === item.path
@@ -56,7 +77,18 @@ export function Layout() {
           </Button>
         </div>
       </aside>
+
+      {/* Main content */}
       <main className="flex-1 bg-gray-50 overflow-auto">
+        {/* Mobile header */}
+        <div className="lg:hidden flex items-center p-3 bg-white border-b">
+          <Button variant="ghost" size="sm" onClick={() => setSidebarOpen(true)}>
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </Button>
+          <span className="ml-2 font-bold">Canteen POS</span>
+        </div>
         <Outlet />
       </main>
     </div>

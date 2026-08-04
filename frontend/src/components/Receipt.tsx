@@ -64,6 +64,7 @@ export function Receipt({ data }: { data: ReceiptData }) {
   );
 }
 
+// eslint-disable-next-line react/only-export-components
 export function printReceipt(data: ReceiptData) {
   const printWindow = window.open('', '_blank');
   if (!printWindow) return;

@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import api from '@/services/api';
+import { showToast } from '@/lib/toast';
+import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -19,12 +21,16 @@ export function MenuPage() {
   const [editing, setEditing] = useState<MenuItem | null>(null);
   const [form, setForm] = useState({ name: '', price: '', category_id: '', description: '' });
 
-  const load = () => {
-    Promise.all([api.get('/menu'), api.get('/categories')]).then(([m, c]) => {
+  const load = async () => {
+    try {
+      const [m, c] = await Promise.all([api.get('/menu'), api.get('/categories')]);
       setItems(m.data);
       setCategories(c.data);
+    } catch {
+      showToast('Failed to load menu items', 'error');
+    } finally {
       setLoading(false);
-    });
+    }
   };
 
   useEffect(() => { load(); }, []);
@@ -35,19 +41,28 @@ export function MenuPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const payload = { ...form, price: Number(form.price), category_id: Number(form.category_id) };
-    if (editing) { await api.put(`/menu/${editing.id}`, payload); }
-    else { await api.post('/menu', payload); }
-    setDialogOpen(false);
-    load();
+    try {
+      if (editing) { await api.put(`/menu/${editing.id}`, payload); showToast('Menu item updated', 'success'); }
+      else { await api.post('/menu', payload); showToast('Menu item created', 'success'); }
+      setDialogOpen(false);
+      load();
+    } catch {
+      showToast('Failed to save menu item', 'error');
+    }
   };
 
   const handleDelete = async (id: number) => {
     if (!confirm('Deactivate this item?')) return;
-    await api.delete(`/menu/${id}`);
-    load();
+    try {
+      await api.delete(`/menu/${id}`);
+      showToast('Menu item deactivated', 'success');
+      load();
+    } catch {
+      showToast('Failed to deactivate item', 'error');
+    }
   };
 
-  if (loading) return <div className="p-6 text-gray-500">Loading...</div>;
+  if (loading) return <div className="flex items-center justify-center p-6"><Spinner className="size-6" /></div>;
 
   return (
     <div className="p-6">
@@ -67,7 +82,9 @@ export function MenuPage() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {items.map((item) => (
+          {items.length === 0 ? (
+            <TableRow><TableCell colSpan={5} className="text-center text-gray-400">No menu items found</TableCell></TableRow>
+          ) : items.map((item) => (
             <TableRow key={item.id}>
               <TableCell className="font-medium">{item.name}</TableCell>
               <TableCell>{item.category?.name}</TableCell>

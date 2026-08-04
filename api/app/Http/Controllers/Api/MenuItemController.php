@@ -34,12 +34,16 @@ class MenuItemController extends Controller
         return response()->json($item->load('category'), 201);
     }
 
-    public function show(MenuItem $menuItem): JsonResponse
+    public function show(MenuItem $menu): JsonResponse
     {
-        return response()->json($menuItem->load(['category', 'recipes.inventoryItem']));
+        $menu->load(['category', 'recipes.inventoryItem']);
+        return response()->json(array_merge($menu->toArray(), [
+            'category' => $menu->category,
+            'recipes' => $menu->recipes,
+        ]));
     }
 
-    public function update(Request $request, MenuItem $menuItem): JsonResponse
+    public function update(Request $request, MenuItem $menu): JsonResponse
     {
         $validated = $request->validate([
             'category_id' => 'sometimes|exists:categories,id',
@@ -50,13 +54,16 @@ class MenuItemController extends Controller
             'is_active' => 'sometimes|boolean',
         ]);
 
-        $menuItem->update($validated);
-        return response()->json($menuItem->load('category'));
+        $menu->update($validated);
+        $menu->load('category');
+        return response()->json(array_merge($menu->toArray(), [
+            'category' => $menu->category,
+        ]));
     }
 
-    public function destroy(MenuItem $menuItem): JsonResponse
+    public function destroy(MenuItem $menu): JsonResponse
     {
-        $menuItem->update(['is_active' => false]);
+        $menu->update(['is_active' => false]);
         return response()->json(['message' => 'Menu item deactivated']);
     }
 }

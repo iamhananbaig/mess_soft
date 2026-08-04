@@ -4,7 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { Spinner } from '@/components/ui/spinner';
 import { printReceipt, type ReceiptData } from '@/components/Receipt';
+import { showToast } from '@/lib/toast';
 
 interface Category {
   id: number;
@@ -31,8 +33,7 @@ export function POSPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -80,8 +81,7 @@ export function POSPage() {
 
   const handleCheckout = async () => {
     if (cart.length === 0) return;
-    setError('');
-    setSuccess('');
+    setCheckoutLoading(true);
 
     try {
       const saleRes = await api.post('/sales', {
@@ -91,24 +91,30 @@ export function POSPage() {
       const receiptRes = await api.get(`/sales/${saleRes.data.id}/receipt`);
       printReceipt(receiptRes.data as ReceiptData);
 
-      setSuccess(`Sale #${saleRes.data.id} completed — Rs.${saleRes.data.total_amount}`);
+      showToast(`Sale #${saleRes.data.id} — Rs.${saleRes.data.total_amount}`, 'success');
       setCart([]);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Sale failed';
-      setError(message);
+      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Sale failed';
+      showToast(message, 'error');
+    } finally {
+      setCheckoutLoading(false);
     }
   };
 
   if (loading) {
-    return <div className="p-6 text-gray-500">Loading...</div>;
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-64px)]">
+        <Spinner className="h-8 w-8" />
+      </div>
+    );
   }
 
   return (
-    <div className="flex h-[calc(100vh-0px)]">
+    <div className="flex flex-col md:flex-row h-[calc(100vh-52px)] md:h-[calc(100vh-0px)]">
       {/* Left: Menu Items */}
       <div className="flex-1 p-4 overflow-auto">
         <Tabs value={selectedCategory} onValueChange={setSelectedCategory}>
-          <TabsList className="mb-4">
+          <TabsList className="mb-4 flex-wrap">
             <TabsTrigger value="all">All</TabsTrigger>
             {categories.map((cat) => (
               <TabsTrigger key={cat.id} value={String(cat.id)}>
@@ -118,31 +124,30 @@ export function POSPage() {
           </TabsList>
         </Tabs>
 
-        {error && (
-          <div className="mb-4 p-3 text-sm text-red-600 bg-red-50 rounded-md">{error}</div>
+        {filteredItems.length === 0 ? (
+          <div className="flex items-center justify-center h-64 text-gray-400">
+            No menu items found
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {filteredItems.map((item) => (
+              <Card
+                key={item.id}
+                className="cursor-pointer hover:shadow-md transition-shadow"
+                onClick={() => addToCart(item)}
+              >
+                <CardContent className="p-4 text-center">
+                  <div className="font-medium text-sm">{item.name}</div>
+                  <div className="text-lg font-bold mt-1">Rs.{item.price}</div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         )}
-        {success && (
-          <div className="mb-4 p-3 text-sm text-green-600 bg-green-50 rounded-md">{success}</div>
-        )}
-
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-          {filteredItems.map((item) => (
-            <Card
-              key={item.id}
-              className="cursor-pointer hover:shadow-md transition-shadow"
-              onClick={() => addToCart(item)}
-            >
-              <CardContent className="p-4 text-center">
-                <div className="font-medium text-sm">{item.name}</div>
-                <div className="text-lg font-bold mt-1">Rs.{item.price}</div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
       </div>
 
       {/* Right: Cart */}
-      <div className="w-80 bg-white border-l flex flex-col">
+      <div className="w-full md:w-80 bg-white border-l flex flex-col max-h-[50vh] md:max-h-none">
         <div className="p-4 border-b">
           <h2 className="font-bold text-lg">Cart</h2>
           {cart.length > 0 && (
@@ -204,10 +209,11 @@ export function POSPage() {
           <Button
             className="w-full"
             size="lg"
-            disabled={cart.length === 0}
+            disabled={cart.length === 0 || checkoutLoading}
             onClick={handleCheckout}
           >
-            Pay Cash — Rs.{total}
+            {checkoutLoading ? <Spinner className="h-4 w-4 mr-2" /> : null}
+            {checkoutLoading ? 'Processing...' : `Pay Cash — Rs.${total}`}
           </Button>
         </div>
       </div>

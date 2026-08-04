@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import api from '@/services/api';
+import { showToast } from '@/lib/toast';
+import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,24 +19,33 @@ export function ConsumptionPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState({ inventory_item_id: '', quantity: '', reason: '' });
 
-  const load = () => {
-    Promise.all([api.get('/inventory'), api.get('/consumptions')]).then(([i, c]) => {
+  const load = async () => {
+    try {
+      const [i, c] = await Promise.all([api.get('/inventory'), api.get('/consumptions')]);
       setItems(i.data);
       setConsumptions(c.data.data ?? c.data);
+    } catch {
+      showToast('Failed to load data', 'error');
+    } finally {
       setLoading(false);
-    });
+    }
   };
   useEffect(() => { load(); }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await api.post('/consumptions', { inventory_item_id: Number(form.inventory_item_id), quantity: Number(form.quantity), reason: form.reason });
-    setDialogOpen(false);
-    setForm({ inventory_item_id: '', quantity: '', reason: '' });
-    load();
+    try {
+      await api.post('/consumptions', { inventory_item_id: Number(form.inventory_item_id), quantity: Number(form.quantity), reason: form.reason });
+      showToast('Consumption recorded', 'success');
+      setDialogOpen(false);
+      setForm({ inventory_item_id: '', quantity: '', reason: '' });
+      load();
+    } catch {
+      showToast('Failed to record consumption', 'error');
+    }
   };
 
-  if (loading) return <div className="p-6 text-gray-500">Loading...</div>;
+  if (loading) return <div className="flex items-center justify-center p-6"><Spinner className="size-6" /></div>;
 
   return (
     <div className="p-6">
@@ -53,7 +64,9 @@ export function ConsumptionPage() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {consumptions.map((c) => (
+          {consumptions.length === 0 ? (
+            <TableRow><TableCell colSpan={4} className="text-center text-gray-400">No consumption records found</TableCell></TableRow>
+          ) : consumptions.map((c) => (
             <TableRow key={c.id}>
               <TableCell>{new Date(c.created_at).toLocaleDateString()}</TableCell>
               <TableCell>{c.inventory_item?.name}</TableCell>

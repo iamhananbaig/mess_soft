@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import api from '@/services/api';
+import { showToast } from '@/lib/toast';
+import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -25,30 +27,47 @@ export function RecipePage() {
       setMenuItems(m.data);
       setInventoryItems(i.data);
       setLoading(false);
+    }).catch(() => {
+      showToast('Failed to load data', 'error');
+      setLoading(false);
     });
   }, []);
 
   const loadRecipes = async (menuItemId: string) => {
     setSelectedMenu(menuItemId);
     if (!menuItemId) { setRecipes([]); return; }
-    const res = await api.get(`/menu/${menuItemId}/recipe`);
-    setRecipes(res.data);
+    try {
+      const res = await api.get(`/menu/${menuItemId}/recipe`);
+      setRecipes(res.data);
+    } catch {
+      showToast('Failed to load recipes', 'error');
+    }
   };
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    await api.post(`/menu/${selectedMenu}/recipe`, { inventory_item_id: Number(form.inventory_item_id), quantity: Number(form.quantity) });
-    setDialogOpen(false);
-    loadRecipes(selectedMenu);
+    try {
+      await api.post(`/menu/${selectedMenu}/recipe`, { inventory_item_id: Number(form.inventory_item_id), quantity: Number(form.quantity) });
+      showToast('Ingredient added', 'success');
+      setDialogOpen(false);
+      loadRecipes(selectedMenu);
+    } catch {
+      showToast('Failed to add ingredient', 'error');
+    }
   };
 
   const handleDelete = async (recipeId: number) => {
     if (!confirm('Remove ingredient?')) return;
-    await api.delete(`/recipes/${recipeId}`);
-    loadRecipes(selectedMenu);
+    try {
+      await api.delete(`/recipes/${recipeId}`);
+      showToast('Ingredient removed', 'success');
+      loadRecipes(selectedMenu);
+    } catch {
+      showToast('Failed to remove ingredient', 'error');
+    }
   };
 
-  if (loading) return <div className="p-6 text-gray-500">Loading...</div>;
+  if (loading) return <div className="flex items-center justify-center p-6"><Spinner className="size-6" /></div>;
 
   return (
     <div className="p-6">
