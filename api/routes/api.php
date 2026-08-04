@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\InventoryController;
 use App\Http\Controllers\Api\ManualConsumptionController;
 use App\Http\Controllers\Api\MenuItemController;
 use App\Http\Controllers\Api\RecipeController;
+use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\SaleController;
 use Illuminate\Support\Facades\Route;
 
@@ -35,4 +36,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/consumptions', [ManualConsumptionController::class, 'store']);
     Route::get('/consumptions', [ManualConsumptionController::class, 'index']);
+
+    Route::get('/reports/daily', [ReportController::class, 'daily']);
+    Route::get('/reports/items', [ReportController::class, 'items']);
+    Route::get('/reports/stock', [ReportController::class, 'stock']);
+    Route::get('/reports/waste', [ReportController::class, 'waste']);
 });
