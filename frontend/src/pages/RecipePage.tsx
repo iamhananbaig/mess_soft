@@ -1,13 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import api from '@/services/api';
 import { showToast } from '@/lib/toast';
-import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { MagnifyingGlass, Trash } from '@phosphor-icons/react';
 
 interface MenuItem { id: number; name: string; }
 interface InventoryItem { id: number; name: string; unit: string; }
@@ -18,29 +21,38 @@ export function RecipePage() {
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [selectedMenu, setSelectedMenu] = useState<string>('');
   const [recipes, setRecipes] = useState<Recipe[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [recipesLoading, setRecipesLoading] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState({ inventory_item_id: '', quantity: '1' });
+  const [search, setSearch] = useState('');
+  const [deleteId, setDeleteId] = useState<number | null>(null);
+
+  const filtered = useMemo(() =>
+    inventoryItems.filter((i) =>
+      i.name.toLowerCase().includes(search.toLowerCase()) ||
+      i.unit.toLowerCase().includes(search.toLowerCase())
+    ), [inventoryItems, search]);
 
   useEffect(() => {
     Promise.all([api.get('/menu'), api.get('/inventory')]).then(([m, i]) => {
       setMenuItems(m.data);
       setInventoryItems(i.data);
-      setLoading(false);
     }).catch(() => {
       showToast('Failed to load data', 'error');
-      setLoading(false);
     });
   }, []);
 
   const loadRecipes = async (menuItemId: string) => {
     setSelectedMenu(menuItemId);
     if (!menuItemId) { setRecipes([]); return; }
+    setRecipesLoading(true);
     try {
       const res = await api.get(`/menu/${menuItemId}/recipe`);
       setRecipes(res.data);
     } catch {
       showToast('Failed to load recipes', 'error');
+    } finally {
+      setRecipesLoading(false);
     }
   };
 
@@ -56,18 +68,17 @@ export function RecipePage() {
     }
   };
 
-  const handleDelete = async (recipeId: number) => {
-    if (!confirm('Remove ingredient?')) return;
+  const handleDelete = async () => {
+    if (deleteId === null) return;
     try {
-      await api.delete(`/recipes/${recipeId}`);
+      await api.delete(`/recipes/${deleteId}`);
       showToast('Ingredient removed', 'success');
+      setDeleteId(null);
       loadRecipes(selectedMenu);
     } catch {
       showToast('Failed to remove ingredient', 'error');
     }
   };
-
-  if (loading) return <div className="flex items-center justify-center p-6"><Spinner className="size-6" /></div>;
 
   return (
     <div className="p-6">
@@ -76,7 +87,7 @@ export function RecipePage() {
       <div className="mb-6">
         <Label>Select Menu Item</Label>
         <Select value={selectedMenu} onValueChange={(v) => loadRecipes(v ?? '')}>
-          <SelectTrigger className="w-64 mt-1"><SelectValue placeholder="Choose menu item" /></SelectTrigger>
+          <SelectTrigger className="w-64 mt-1"><SelectValue placeholder="Choose menu item">{menuItems.find((m) => String(m.id) === selectedMenu)?.name}</SelectValue></SelectTrigger>
           <SelectContent>
             {menuItems.map((m) => (<SelectItem key={m.id} value={String(m.id)}>{m.name}</SelectItem>))}
           </SelectContent>
@@ -90,30 +101,46 @@ export function RecipePage() {
             <Button onClick={() => { setForm({ inventory_item_id: '', quantity: '1' }); setDialogOpen(true); }}>Add Ingredient</Button>
           </div>
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Ingredient</TableHead>
-                <TableHead>Unit</TableHead>
-                <TableHead>Quantity</TableHead>
-                <TableHead className="w-20">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {recipes.length === 0 ? (
-                <TableRow><TableCell colSpan={4} className="text-center text-gray-400">No ingredients added yet</TableCell></TableRow>
-              ) : recipes.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell className="font-medium">{r.inventory_item.name}</TableCell>
-                  <TableCell>{r.inventory_item.unit}</TableCell>
-                  <TableCell>{r.quantity}</TableCell>
-                  <TableCell>
-                    <Button variant="ghost" size="sm" className="text-red-500" onClick={() => handleDelete(r.id)}>Remove</Button>
-                  </TableCell>
-                </TableRow>
+          {recipesLoading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="flex gap-4 p-3">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-4 w-16" />
+                </div>
               ))}
-            </TableBody>
-          </Table>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Ingredient</TableHead>
+                  <TableHead>Unit</TableHead>
+                  <TableHead>Quantity</TableHead>
+                  <TableHead className="w-20">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {recipes.length === 0 ? (
+                  <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-8">No ingredients added yet</TableCell></TableRow>
+                ) : recipes.map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell className="font-medium">{r.inventory_item.name}</TableCell>
+                    <TableCell>{r.inventory_item.unit}</TableCell>
+                    <TableCell>{r.quantity}</TableCell>
+                    <TableCell>
+                      <TooltipProvider>
+                        <Tooltip><TooltipTrigger render={<Button variant="ghost" size="sm" className="text-destructive" onClick={() => setDeleteId(r.id)} />}>
+                            <Trash className="size-4" />
+                        </TooltipTrigger><TooltipContent>Remove</TooltipContent></Tooltip>
+                      </TooltipProvider>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </>
       )}
 
@@ -124,11 +151,15 @@ export function RecipePage() {
             <div className="space-y-2">
               <Label>Ingredient</Label>
               <Select value={form.inventory_item_id} onValueChange={(v) => setForm({ ...form, inventory_item_id: v ?? '' })}>
-                <SelectTrigger><SelectValue placeholder="Select ingredient" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Select ingredient">{inventoryItems.find((i) => String(i.id) === form.inventory_item_id)?.name}</SelectValue></SelectTrigger>
                 <SelectContent>
-                  {inventoryItems.map((i) => (<SelectItem key={i.id} value={String(i.id)}>{i.name} ({i.unit})</SelectItem>))}
+                  {filtered.map((i) => (<SelectItem key={i.id} value={String(i.id)}>{i.name} ({i.unit})</SelectItem>))}
                 </SelectContent>
               </Select>
+              <div className="relative mt-1">
+                <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                <Input placeholder="Search ingredients..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Quantity per menu item</Label>
@@ -138,6 +169,19 @@ export function RecipePage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={deleteId !== null} onOpenChange={(open) => { if (!open) setDeleteId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove Ingredient?</AlertDialogTitle>
+            <AlertDialogDescription>This will remove the ingredient from the recipe. You can re-add it later.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Remove</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

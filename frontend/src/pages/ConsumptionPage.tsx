@@ -1,13 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import api from '@/services/api';
 import { showToast } from '@/lib/toast';
-import { Spinner } from '@/components/ui/spinner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
+import { MagnifyingGlass } from '@phosphor-icons/react';
 
 interface InventoryItem { id: number; name: string; unit: string; }
 interface Consumption { id: number; quantity: number; reason: string; created_at: string; inventory_item: InventoryItem; }
@@ -18,6 +19,13 @@ export function ConsumptionPage() {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState({ inventory_item_id: '', quantity: '', reason: '' });
+  const [search, setSearch] = useState('');
+
+  const filtered = useMemo(() =>
+    consumptions.filter((c) =>
+      c.inventory_item?.name?.toLowerCase().includes(search.toLowerCase()) ||
+      c.reason?.toLowerCase().includes(search.toLowerCase())
+    ), [consumptions, search]);
 
   const load = async () => {
     try {
@@ -45,8 +53,6 @@ export function ConsumptionPage() {
     }
   };
 
-  if (loading) return <div className="flex items-center justify-center p-6"><Spinner className="size-6" /></div>;
-
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
@@ -54,28 +60,50 @@ export function ConsumptionPage() {
         <Button onClick={() => setDialogOpen(true)}>Record Consumption</Button>
       </div>
 
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Date</TableHead>
-            <TableHead>Item</TableHead>
-            <TableHead>Quantity</TableHead>
-            <TableHead>Reason</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {consumptions.length === 0 ? (
-            <TableRow><TableCell colSpan={4} className="text-center text-gray-400">No consumption records found</TableCell></TableRow>
-          ) : consumptions.map((c) => (
-            <TableRow key={c.id}>
-              <TableCell>{new Date(c.created_at).toLocaleDateString()}</TableCell>
-              <TableCell>{c.inventory_item?.name}</TableCell>
-              <TableCell>{c.quantity}</TableCell>
-              <TableCell>{c.reason}</TableCell>
-            </TableRow>
+      <div className="mb-4">
+        <div className="relative max-w-sm">
+          <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+          <Input placeholder="Search consumptions..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="flex gap-4 p-3">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-4 w-16" />
+              <Skeleton className="h-4 w-24" />
+            </div>
           ))}
-        </TableBody>
-      </Table>
+        </div>
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Date</TableHead>
+              <TableHead>Item</TableHead>
+              <TableHead>Quantity</TableHead>
+              <TableHead>Reason</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filtered.length === 0 ? (
+              <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-8">
+                {search ? 'No consumption records match your search' : 'No consumption records found'}
+              </TableCell></TableRow>
+            ) : filtered.map((c) => (
+              <TableRow key={c.id}>
+                <TableCell>{new Date(c.created_at).toLocaleDateString()}</TableCell>
+                <TableCell className="font-medium">{c.inventory_item?.name}</TableCell>
+                <TableCell>{c.quantity}</TableCell>
+                <TableCell>{c.reason}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
@@ -84,7 +112,7 @@ export function ConsumptionPage() {
             <div className="space-y-2">
               <Label>Item</Label>
               <Select value={form.inventory_item_id} onValueChange={(v) => setForm({ ...form, inventory_item_id: v ?? '' })}>
-                <SelectTrigger><SelectValue placeholder="Select item" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Select item">{items.find((i) => String(i.id) === form.inventory_item_id)?.name}</SelectValue></SelectTrigger>
                 <SelectContent>
                   {items.map((i) => (<SelectItem key={i.id} value={String(i.id)}>{i.name} ({i.unit})</SelectItem>))}
                 </SelectContent>
