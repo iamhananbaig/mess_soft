@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CategoryController;
+use App\Http\Controllers\Api\EmployeeController;
 use App\Http\Controllers\Api\InventoryController;
 use App\Http\Controllers\Api\ManualConsumptionController;
 use App\Http\Controllers\Api\MenuItemController;
@@ -41,4 +42,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/reports/items', [ReportController::class, 'items']);
     Route::get('/reports/stock', [ReportController::class, 'stock']);
     Route::get('/reports/waste', [ReportController::class, 'waste']);
+
+    Route::get('/employees', [EmployeeController::class, 'index']);
+    Route::put('/employees/{employee}', [EmployeeController::class, 'update']);
+    Route::post('/employees/{employee}/role', [EmployeeController::class, 'updateRole']);
 });
