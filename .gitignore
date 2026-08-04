@@ -1,0 +1,31 @@
+# Zone.Identifier files (Windows NTFS)
+*:Zone.Identifier
+*:Zone.Identifier:Zone.Identifier
+
+# Node
+node_modules/
+dist/
+
+# PHP
+vendor/
+
+# SQLite
+api/database/database.sqlite
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+
+# Build
+*.log
