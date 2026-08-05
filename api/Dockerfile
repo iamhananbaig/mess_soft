@@ -1,4 +1,4 @@
-FROM php:8.3-fpm AS production
+FROM php:8.4-fpm AS production
 
 # System dependencies
 RUN apt-get update && apt-get install -y \
