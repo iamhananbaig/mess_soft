@@ -41,7 +41,7 @@ Edit `.env.docker.local` with your values:
 APP_NAME="Canteen Management"
 APP_ENV=production
 APP_DEBUG=false
-APP_URL=http://YOUR_SERVER_IP:8080
+APP_URL=http://YOUR_SERVER_IP:9090
 
 APP_TIMEZONE=Asia/Karachi
 
@@ -86,7 +86,7 @@ This starts 4 containers:
 | `mess-soft-db-1` | MySQL 8.0 | 3307 (host) → 3306 (container) |
 | `mess-soft-api-1` | Laravel PHP-FPM | internal (9000) |
 | `mess-soft-queue-1` | Queue worker | — |
-| `mess-soft-nginx-1` | Nginx (frontend + API proxy) | **8080** |
+| `mess-soft-nginx-1` | Nginx (frontend + API proxy) | **9090** |
 
 ## 4. Initialize Database
 
@@ -125,19 +125,19 @@ exit;
 
 ```bash
 # Health check
-curl http://YOUR_SERVER_IP:8080/up
+curl http://YOUR_SERVER_IP:9090/up
 # → {"status":"ok"}
 
 # API test
-curl http://YOUR_SERVER_IP:8080/api/v1/login
+curl http://YOUR_SERVER_IP:9090/api/v1/login
 # → {"message":"Validation failed",...}
 
 # Frontend
-curl -s http://YOUR_SERVER_IP:8080/ | head -5
+curl -s http://YOUR_SERVER_IP:9090/ | head -5
 # → HTML with <div id="root">
 ```
 
-Open `http://YOUR_SERVER_IP:8080` in a browser.
+Open `http://YOUR_SERVER_IP:9090` in a browser.
 
 ## 7. Common Docker Commands
 
@@ -220,7 +220,7 @@ docker compose exec -T db mysql -u mess_user -p'PASSWORD' mess_soft < backup.sql
 |---------|----------|
 | Container won't start | `docker compose logs <service>` to see the error |
 | `SQLSTATE[HY000]` connection refused | DB container not ready. Wait for healthcheck or `docker compose restart api` |
-| Port 8080 already in use | Change `APP_PORT` in `.env.docker.local` (e.g., `APP_PORT=9090`) |
+| Port 9090 already in use | Change `APP_PORT` in `.env.docker.local` (e.g., `APP_PORT=9090`) |
 | Permission errors on storage | `docker compose exec api chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache` |
 | Frontend shows blank page | Rebuild: `docker compose up -d --build nginx` (rebakes frontend) |
 | Queue jobs not processing | `docker compose restart queue` or check `docker compose logs queue` |

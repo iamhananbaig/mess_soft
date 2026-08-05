@@ -64,7 +64,7 @@ services:
     depends_on:
       - api
     ports:
-      - "${APP_PORT:-8080}:80"
+      - "${APP_PORT:-9090}:80"
     volumes:
       - api_storage:/var/www/api/storage:ro
       - api_cache:/var/www/api/bootstrap/cache:ro
