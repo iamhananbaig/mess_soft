@@ -21,8 +21,7 @@ RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
 COPY api/ .
 
 # Optimize
-RUN composer dump-autoload --optimize --no-dev \
-    && composer cache:clear
+RUN composer dump-autoload --optimize --no-dev
 
 # Set permissions
 RUN chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache \
