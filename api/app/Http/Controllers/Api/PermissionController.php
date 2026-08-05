@@ -23,6 +23,10 @@ class PermissionController extends Controller
 
     public function update(Request $request, Role $role): JsonResponse
     {
+        if ($role->name === 'super-admin') {
+            return response()->json(['message' => 'Cannot modify super-admin role'], 422);
+        }
+
         $validated = $request->validate([
             'permissions' => 'required|array',
             'permissions.*' => 'string|exists:permissions,name',

@@ -145,31 +145,34 @@ class ReportController extends Controller
         $items = InventoryItem::active()
             ->select('id', 'name', 'unit', 'current_stock')
             ->orderBy('name')
+            ->get();
+
+        $allMovements = StockMovement::whereBetween('created_at', [$from, $to])
+            ->select('inventory_item_id', 'source', DB::raw('SUM(quantity) as total'))
+            ->groupBy('inventory_item_id', 'source')
             ->get()
-            ->map(function ($item) use ($from, $to) {
-                $movements = StockMovement::where('inventory_item_id', $item->id)
-                    ->whereBetween('created_at', [$from, $to])
-                    ->select('source', DB::raw('SUM(quantity) as total'))
-                    ->groupBy('source')
-                    ->pluck('total', 'source');
+            ->groupBy('inventory_item_id');
 
-                $closing = (float) $item->current_stock;
-                $netChange = $movements->sum();
-                $opening = $closing - $netChange;
+        $items = $items->map(function ($item) use ($allMovements) {
+            $movements = ($allMovements[$item->id] ?? collect())->pluck('total', 'source');
 
-                return [
-                    'id' => $item->id,
-                    'name' => $item->name,
-                    'unit' => $item->unit,
-                    'opening' => round($opening, 2),
-                    'additions' => round((float) ($movements['stock-in'] ?? 0), 2),
-                    'pos_consumption' => round((float) ($movements['sale'] ?? 0), 2),
-                    'manual_consumption' => round((float) ($movements['manual'] ?? 0), 2),
-                    'expired' => round((float) ($movements['expiry'] ?? 0), 2),
-                    'adjustments' => round((float) ($movements['adjustment'] ?? 0), 2),
-                    'closing' => $closing,
-                ];
-            });
+            $closing = (float) $item->current_stock;
+            $netChange = $movements->sum();
+            $opening = $closing - $netChange;
+
+            return [
+                'id' => $item->id,
+                'name' => $item->name,
+                'unit' => $item->unit,
+                'opening' => round($opening, 2),
+                'additions' => round((float) ($movements['stock-in'] ?? 0), 2),
+                'pos_consumption' => round((float) ($movements['sale'] ?? 0), 2),
+                'manual_consumption' => round((float) ($movements['manual'] ?? 0), 2),
+                'expired' => round((float) ($movements['expiry'] ?? 0), 2),
+                'adjustments' => round((float) ($movements['adjustment'] ?? 0), 2),
+                'closing' => $closing,
+            ];
+        });
 
         return response()->json($items);
     }

@@ -13,6 +13,10 @@ class DemoDataSeeder extends Seeder
 {
     public function run(): void
     {
+        if (app()->environment('production')) {
+            return;
+        }
+
         // Users
         $admin = User::create(['name' => 'Admin', 'email' => 'admin@canteen.com', 'password' => bcrypt('password')]);
         $cashier = User::create(['name' => 'Cashier 1', 'email' => 'cashier@canteen.com', 'password' => bcrypt('password')]);

@@ -128,11 +128,12 @@ export function ReportsPage() {
         if (items.length > 0 && !selectedItemId) {
           setSelectedItemId(String(items[0].id));
         }
+      }).catch(() => {
+        showToast('Failed to load inventory items', 'error');
       });
     }
   }, [tab, ledgerItems.length, selectedItemId]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, [tab, date, fromDate, toDate, selectedItemId]);
 
   const flatReceiptItems = receipts.flatMap((r) =>

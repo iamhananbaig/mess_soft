@@ -43,7 +43,14 @@ mess_soft/
 ├── SCHEMA.md               # DB quick reference
 ├── API.md                  # API quick reference
 ├── PHASES.md               # Build checklist
-└── CONVENTIONS.md          # Code style + templates
+├── CONVENTIONS.md          # Code style + templates
+├── DEPLOYMENT.md           # Production deployment guide (Docker + manual)
+├── docker-compose.yml      # Docker stack: api + queue + nginx + MySQL
+├── .env.docker             # Docker environment template
+└── docker/                 # Docker configs
+    ├── Dockerfile.nginx    # Multi-stage: builds frontend + serves via Nginx
+    ├── nginx.conf          # Nginx config (SPA + API proxy)
+    └── php-fpm.conf        # PHP-FPM pool config
 ```
 
 ## Dev Commands
@@ -72,6 +79,13 @@ cd frontend && npm run build        # tsc -b && vite build
 
 # Reset DB
 cd api && php artisan migrate:fresh --seed
+
+# Docker (production)
+docker compose --env-file .env.docker.local up -d --build   # build + start all
+docker compose logs -f                                      # tail logs
+docker compose exec api php artisan <cmd>                   # run artisan
+docker compose restart api                                  # restart API
+docker compose up -d --build api                            # rebuild API only
 ```
 
 ## Key Architecture Notes
@@ -93,6 +107,7 @@ cd api && php artisan migrate:fresh --seed
 - **API.md** — API quick reference
 - **PHASES.md** — build checklist
 - **CONVENTIONS.md** — code style + templates (Laravel + React + shadcn/ui)
+- **DEPLOYMENT.md** — production deployment guide (Docker + manual)
 
 ## Conventions
 - All monetary values in **PKR** (integer); receipts show `Rs.XXX`

@@ -48,7 +48,7 @@ class SaleController extends Controller
                     $needed = $recipe->quantity * $item['quantity'];
                     $inventory = $inventoryItems[$recipe->inventory_item_id];
                     if ($inventory->current_stock < $needed) {
-                        abort(422, "Insufficient stock for {$inventory->name}");
+                        return response()->json(['message' => "Insufficient stock for {$inventory->name}"], 422);
                     }
                 }
             }
@@ -60,7 +60,7 @@ class SaleController extends Controller
             }
 
             if ($validated['amount_received'] < $totalAmount) {
-                abort(422, 'Amount received must be greater than or equal to total');
+                return response()->json(['message' => 'Amount received must be greater than or equal to total'], 422);
             }
 
             $change = $validated['amount_received'] - $totalAmount;
@@ -111,19 +111,27 @@ class SaleController extends Controller
 
     public function index(Request $request): JsonResponse
     {
+        $validated = $request->validate([
+            'from' => 'nullable|date',
+            'to' => 'nullable|date',
+            'user_id' => 'nullable|exists:users,id',
+            'per_page' => 'sometimes|integer|min:1|max:100',
+        ]);
+
         $query = Sale::with('items.menuItem')->orderByDesc('created_at');
 
-        if ($request->from) {
-            $query->where('created_at', '>=', $request->from);
+        if ($validated['from'] ?? null) {
+            $query->where('created_at', '>=', $validated['from']);
         }
-        if ($request->to) {
-            $query->where('created_at', '<=', $request->to . ' 23:59:59');
+        if ($validated['to'] ?? null) {
+            $query->where('created_at', '<=', $validated['to'] . ' 23:59:59');
         }
-        if ($request->user_id) {
-            $query->where('user_id', $request->user_id);
+        if ($validated['user_id'] ?? null) {
+            $query->where('user_id', $validated['user_id']);
         }
 
-        $sales = $query->paginate($request->per_page ?? 20);
+        $perPage = min((int) ($validated['per_page'] ?? 20), 100);
+        $sales = $query->paginate($perPage);
         return response()->json($sales);
     }
 

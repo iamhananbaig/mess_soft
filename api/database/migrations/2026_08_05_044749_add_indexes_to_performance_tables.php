@@ -16,6 +16,7 @@ return new class extends Migration
         Schema::table('stock_movements', function (Blueprint $table) {
             $table->index('created_at');
             $table->index('type');
+            $table->index(['inventory_item_id', 'created_at']);
         });
 
         Schema::table('manual_consumptions', function (Blueprint $table) {
@@ -24,10 +25,12 @@ return new class extends Migration
 
         Schema::table('menu_items', function (Blueprint $table) {
             $table->index('name');
+            $table->index('is_active');
         });
 
         Schema::table('inventory_items', function (Blueprint $table) {
             $table->index('name');
+            $table->index('is_active');
         });
     }
 
@@ -41,6 +44,7 @@ return new class extends Migration
         Schema::table('stock_movements', function (Blueprint $table) {
             $table->dropIndex(['created_at']);
             $table->dropIndex(['type']);
+            $table->dropIndex(['inventory_item_id', 'created_at']);
         });
 
         Schema::table('manual_consumptions', function (Blueprint $table) {
@@ -49,10 +53,12 @@ return new class extends Migration
 
         Schema::table('menu_items', function (Blueprint $table) {
             $table->dropIndex(['name']);
+            $table->dropIndex(['is_active']);
         });
 
         Schema::table('inventory_items', function (Blueprint $table) {
             $table->dropIndex(['name']);
+            $table->dropIndex(['is_active']);
         });
     }
 };

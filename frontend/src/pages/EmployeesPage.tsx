@@ -35,7 +35,7 @@ export function EmployeesPage() {
       e.roles[0]?.name?.toLowerCase().includes(search.toLowerCase())
     ), [employees, search]);
 
-  const load = () => { api.get('/employees').then((r) => { setEmployees(r.data.data ?? r.data); }).catch(() => {}).finally(() => { setLoading(false); }); };
+  const load = () => { api.get('/employees').then((r) => { setEmployees(r.data.data ?? r.data); }).catch(() => { showToast('Failed to load employees', 'error'); }).finally(() => { setLoading(false); }); };
   useEffect(() => { load(); }, []);
 
   const openEdit = (emp: Employee) => {
