@@ -15,6 +15,7 @@ const InventoryPage = lazy(() => import('@/pages/InventoryPage').then((m) => ({ 
 const ReportsPage = lazy(() => import('@/pages/ReportsPage').then((m) => ({ default: m.ReportsPage })));
 const ConsumptionPage = lazy(() => import('@/pages/ConsumptionPage').then((m) => ({ default: m.ConsumptionPage })));
 const EmployeesPage = lazy(() => import('@/pages/EmployeesPage').then((m) => ({ default: m.EmployeesPage })));
+const PermissionsPage = lazy(() => import('@/pages/PermissionsPage').then((m) => ({ default: m.PermissionsPage })));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage').then((m) => ({ default: m.NotFoundPage })));
 
 export default function App() {
@@ -39,6 +40,7 @@ export default function App() {
                 <Route path="reports" element={<Suspense fallback={<PageSpinner />}><ReportsPage /></Suspense>} />
                 <Route path="consumptions" element={<Suspense fallback={<PageSpinner />}><ConsumptionPage /></Suspense>} />
                 <Route path="employees" element={<Suspense fallback={<PageSpinner />}><EmployeesPage /></Suspense>} />
+                <Route path="permissions" element={<Suspense fallback={<PageSpinner />}><PermissionsPage /></Suspense>} />
                 <Route path="*" element={<Suspense fallback={<PageSpinner />}><NotFoundPage /></Suspense>} />
               </Route>
             </Routes>

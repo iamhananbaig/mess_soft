@@ -7,10 +7,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class InventoryItem extends Model
 {
-    protected $fillable = ['name', 'unit', 'current_stock', 'cost_per_unit', 'expiry_date', 'is_active'];
+    protected $fillable = ['name', 'unit', 'current_stock', 'expiry_date', 'is_active'];
     protected $casts = [
         'current_stock' => 'decimal:2',
-        'cost_per_unit' => 'integer',
         'expiry_date' => 'date',
         'is_active' => 'boolean',
     ];

@@ -67,17 +67,9 @@ class ReportController extends Controller
     public function stock(): JsonResponse
     {
         $items = InventoryItem::active()
-            ->select('id', 'name', 'unit', 'current_stock', 'cost_per_unit')
+            ->select('id', 'name', 'unit', 'current_stock')
             ->orderBy('name')
-            ->get()
-            ->map(fn($item) => [
-                'id' => $item->id,
-                'name' => $item->name,
-                'unit' => $item->unit,
-                'current_stock' => $item->current_stock,
-                'cost_per_unit' => $item->cost_per_unit,
-                'total_value' => $item->current_stock * $item->cost_per_unit,
-            ]);
+            ->get();
 
         return response()->json($items);
     }
@@ -141,6 +133,103 @@ class ReportController extends Controller
         return response()->json([
             'date' => $date->format('Y-m-d'),
             'receipts' => $receipts,
+        ]);
+    }
+
+    public function stockSummary(Request $request): JsonResponse
+    {
+        $request->validate(['from' => 'nullable|date', 'to' => 'nullable|date']);
+        $from = $request->from ? Carbon::parse($request->from) : Carbon::now()->startOfMonth()->toDateTimeString();
+        $to = $request->to ? Carbon::parse($request->to)->endOfDay() : Carbon::now();
+
+        $items = InventoryItem::active()
+            ->select('id', 'name', 'unit', 'current_stock')
+            ->orderBy('name')
+            ->get()
+            ->map(function ($item) use ($from, $to) {
+                $movements = StockMovement::where('inventory_item_id', $item->id)
+                    ->whereBetween('created_at', [$from, $to])
+                    ->select('source', DB::raw('SUM(quantity) as total'))
+                    ->groupBy('source')
+                    ->pluck('total', 'source');
+
+                $closing = (float) $item->current_stock;
+                $netChange = $movements->sum();
+                $opening = $closing - $netChange;
+
+                return [
+                    'id' => $item->id,
+                    'name' => $item->name,
+                    'unit' => $item->unit,
+                    'opening' => round($opening, 2),
+                    'additions' => round((float) ($movements['stock-in'] ?? 0), 2),
+                    'pos_consumption' => round((float) ($movements['sale'] ?? 0), 2),
+                    'manual_consumption' => round((float) ($movements['manual'] ?? 0), 2),
+                    'expired' => round((float) ($movements['expiry'] ?? 0), 2),
+                    'adjustments' => round((float) ($movements['adjustment'] ?? 0), 2),
+                    'closing' => $closing,
+                ];
+            });
+
+        return response()->json($items);
+    }
+
+    public function ledger(Request $request): JsonResponse
+    {
+        $request->validate([
+            'inventory_item_id' => 'required|exists:inventory_items,id',
+            'from' => 'nullable|date',
+            'to' => 'nullable|date',
+        ]);
+
+        $from = $request->from ? Carbon::parse($request->from) : Carbon::now()->startOfMonth()->toDateTimeString();
+        $to = $request->to ? Carbon::parse($request->to)->endOfDay() : Carbon::now();
+
+        $item = InventoryItem::findOrFail($request->inventory_item_id);
+
+        $movements = StockMovement::where('inventory_item_id', $item->id)
+            ->whereBetween('created_at', [$from, $to])
+            ->with('user:id,name')
+            ->orderBy('created_at', 'asc')
+            ->get();
+
+        $netInPeriod = (float) $movements->sum('quantity');
+        $closing = (float) $item->current_stock;
+        $opening = $closing - $netInPeriod;
+
+        $balance = $opening;
+        $movements = $movements->map(function ($m) use (&$balance) {
+            $balance += (float) $m->quantity;
+            return [
+                'id' => $m->id,
+                'date' => $m->created_at->timezone('Asia/Karachi')->format('Y-m-d h:i A'),
+                'type' => $m->type,
+                'source' => $m->source,
+                'source_label' => match ($m->source) {
+                    'stock-in' => 'Stock In',
+                    'sale' => 'POS Sale',
+                    'manual' => 'Manual Consumption',
+                    'adjustment' => 'Adjustment',
+                    'expiry' => 'Expired',
+                    default => ucfirst($m->type),
+                },
+                'quantity' => (float) $m->quantity,
+                'balance' => round($balance, 2),
+                'reference' => $m->reference,
+                'note' => $m->note,
+                'user' => $m->user->name,
+            ];
+        });
+
+        return response()->json([
+            'item' => [
+                'id' => $item->id,
+                'name' => $item->name,
+                'unit' => $item->unit,
+            ],
+            'opening_stock' => round($opening, 2),
+            'closing_stock' => $closing,
+            'movements' => $movements,
         ]);
     }
 }

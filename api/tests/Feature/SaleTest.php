@@ -14,15 +14,16 @@ class SaleTest extends TestCase
     {
         $cat = Category::create(['name' => 'Drinks']);
         $coke = MenuItem::create(['category_id' => $cat->id, 'name' => 'Coke', 'price' => 60]);
-        $cokeInv = InventoryItem::create(['name' => 'Coke Bottle', 'unit' => 'bottle', 'cost_per_unit' => 40, 'current_stock' => 60]);
+        $cokeInv = InventoryItem::create(['name' => 'Coke Bottle', 'unit' => 'bottle', 'current_stock' => 60]);
         Recipe::create(['menu_item_id' => $coke->id, 'inventory_item_id' => $cokeInv->id, 'quantity' => 1]);
 
         $response = $this->withHeaders($this->authHeaders())->postJson('/api/v1/sales', [
             'items' => [['menu_item_id' => $coke->id, 'quantity' => 2]],
+            'amount_received' => 150,
         ]);
 
         $response->assertCreated();
-        $this->assertDatabaseHas('sales', ['total_amount' => 120]);
+        $this->assertDatabaseHas('sales', ['total_amount' => 120, 'amount_received' => 150, 'change' => 30]);
         $this->assertDatabaseHas('inventory_items', ['id' => $cokeInv->id, 'current_stock' => 58]);
         $this->assertDatabaseHas('stock_movements', [
             'inventory_item_id' => $cokeInv->id,
@@ -35,9 +36,9 @@ class SaleTest extends TestCase
     {
         $cat = Category::create(['name' => 'Burgers']);
         $burger = MenuItem::create(['category_id' => $cat->id, 'name' => 'Chicken Burger', 'price' => 350]);
-        $bun = InventoryItem::create(['name' => 'Bun', 'unit' => 'pcs', 'cost_per_unit' => 15, 'current_stock' => 100]);
-        $patty = InventoryItem::create(['name' => 'Chicken Patty', 'unit' => 'pcs', 'cost_per_unit' => 80, 'current_stock' => 50]);
-        $lettuce = InventoryItem::create(['name' => 'Lettuce', 'unit' => 'g', 'cost_per_unit' => 1, 'current_stock' => 2000]);
+        $bun = InventoryItem::create(['name' => 'Bun', 'unit' => 'pcs', 'current_stock' => 100]);
+        $patty = InventoryItem::create(['name' => 'Chicken Patty', 'unit' => 'pcs', 'current_stock' => 50]);
+        $lettuce = InventoryItem::create(['name' => 'Lettuce', 'unit' => 'g', 'current_stock' => 2000]);
 
         Recipe::create(['menu_item_id' => $burger->id, 'inventory_item_id' => $bun->id, 'quantity' => 1]);
         Recipe::create(['menu_item_id' => $burger->id, 'inventory_item_id' => $patty->id, 'quantity' => 1]);
@@ -45,6 +46,7 @@ class SaleTest extends TestCase
 
         $response = $this->withHeaders($this->authHeaders())->postJson('/api/v1/sales', [
             'items' => [['menu_item_id' => $burger->id, 'quantity' => 2]],
+            'amount_received' => 700,
         ]);
 
         $response->assertCreated();
@@ -58,12 +60,13 @@ class SaleTest extends TestCase
     {
         $cat = Category::create(['name' => 'Burgers']);
         $burger = MenuItem::create(['category_id' => $cat->id, 'name' => 'Burger', 'price' => 300]);
-        $bun = InventoryItem::create(['name' => 'Bun', 'unit' => 'pcs', 'cost_per_unit' => 15, 'current_stock' => 2]);
+        $bun = InventoryItem::create(['name' => 'Bun', 'unit' => 'pcs', 'current_stock' => 2]);
 
         Recipe::create(['menu_item_id' => $burger->id, 'inventory_item_id' => $bun->id, 'quantity' => 1]);
 
         $response = $this->withHeaders($this->authHeaders())->postJson('/api/v1/sales', [
             'items' => [['menu_item_id' => $burger->id, 'quantity' => 5]],
+            'amount_received' => 1500,
         ]);
 
         $response->assertStatus(422)->assertJson(['message' => 'Insufficient stock for Bun']);
@@ -74,6 +77,7 @@ class SaleTest extends TestCase
     {
         $response = $this->withHeaders($this->authHeaders())->postJson('/api/v1/sales', [
             'items' => [],
+            'amount_received' => 0,
         ]);
 
         $response->assertUnprocessable();
@@ -83,14 +87,16 @@ class SaleTest extends TestCase
     {
         $cat = Category::create(['name' => 'Drinks']);
         $coke = MenuItem::create(['category_id' => $cat->id, 'name' => 'Coke', 'price' => 60]);
-        $cokeInv = InventoryItem::create(['name' => 'Coke', 'unit' => 'pcs', 'cost_per_unit' => 40, 'current_stock' => 60]);
+        $cokeInv = InventoryItem::create(['name' => 'Coke', 'unit' => 'pcs', 'current_stock' => 60]);
         Recipe::create(['menu_item_id' => $coke->id, 'inventory_item_id' => $cokeInv->id, 'quantity' => 1]);
 
         $this->withHeaders($this->authHeaders())->postJson('/api/v1/sales', [
             'items' => [['menu_item_id' => $coke->id, 'quantity' => 1]],
+            'amount_received' => 60,
         ]);
         $this->withHeaders($this->authHeaders())->postJson('/api/v1/sales', [
             'items' => [['menu_item_id' => $coke->id, 'quantity' => 1]],
+            'amount_received' => 60,
         ]);
 
         $response = $this->withHeaders($this->authHeaders())->getJson('/api/v1/sales');
@@ -103,11 +109,12 @@ class SaleTest extends TestCase
     {
         $cat = Category::create(['name' => 'Drinks']);
         $coke = MenuItem::create(['category_id' => $cat->id, 'name' => 'Coke', 'price' => 60]);
-        $cokeInv = InventoryItem::create(['name' => 'Coke', 'unit' => 'pcs', 'cost_per_unit' => 40, 'current_stock' => 60]);
+        $cokeInv = InventoryItem::create(['name' => 'Coke', 'unit' => 'pcs', 'current_stock' => 60]);
         Recipe::create(['menu_item_id' => $coke->id, 'inventory_item_id' => $cokeInv->id, 'quantity' => 1]);
 
         $createResponse = $this->withHeaders($this->authHeaders())->postJson('/api/v1/sales', [
             'items' => [['menu_item_id' => $coke->id, 'quantity' => 1]],
+            'amount_received' => 60,
         ]);
 
         $saleId = $createResponse->json('id');
@@ -120,11 +127,12 @@ class SaleTest extends TestCase
     {
         $cat = Category::create(['name' => 'Drinks']);
         $coke = MenuItem::create(['category_id' => $cat->id, 'name' => 'Coke', 'price' => 60]);
-        $cokeInv = InventoryItem::create(['name' => 'Coke', 'unit' => 'pcs', 'cost_per_unit' => 40, 'current_stock' => 60]);
+        $cokeInv = InventoryItem::create(['name' => 'Coke', 'unit' => 'pcs', 'current_stock' => 60]);
         Recipe::create(['menu_item_id' => $coke->id, 'inventory_item_id' => $cokeInv->id, 'quantity' => 1]);
 
         $createResponse = $this->withHeaders($this->authHeaders())->postJson('/api/v1/sales', [
             'items' => [['menu_item_id' => $coke->id, 'quantity' => 2]],
+            'amount_received' => 150,
         ]);
 
         $saleId = $createResponse->json('id');
@@ -134,5 +142,7 @@ class SaleTest extends TestCase
             'canteen_name', 'branch_name', 'date', 'time', 'receipt_number', 'cashier', 'items', 'total', 'payment_method', 'amount_received', 'change',
         ]);
         $this->assertEquals(120, $response->json('total'));
+        $this->assertEquals(150, $response->json('amount_received'));
+        $this->assertEquals(30, $response->json('change'));
     }
 }

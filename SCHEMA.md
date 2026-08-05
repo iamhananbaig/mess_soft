@@ -58,7 +58,6 @@ SQLite. All monetary values: PKR (integer). Timestamps: UTC.
 | name | varchar(255) | e.g. "Chicken Patty", "Bun" |
 | unit | varchar(50) | pcs, ml, g, kg, bottle |
 | current_stock | decimal(10,2) | quantity on hand |
-| cost_per_unit | bigint | PKR, for valuation |
 | expiry_date | date | nullable, batch expiry |
 | is_active | boolean | default: true |
 | created_at | timestamp | |
@@ -106,6 +105,8 @@ SQLite. All monetary values: PKR (integer). Timestamps: UTC.
 | user_id | bigint FK → users | cashier who processed |
 | total_amount | bigint | PKR |
 | payment_method | enum(`cash`) | wallet added later |
+| amount_received | bigint | nullable, cash tendered |
+| change | bigint | nullable, change given |
 | created_at | timestamp | |
 | updated_at | timestamp | |
 

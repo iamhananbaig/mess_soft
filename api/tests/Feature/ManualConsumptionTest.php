@@ -9,7 +9,7 @@ class ManualConsumptionTest extends TestCase
 {
     public function test_record_consumption(): void
     {
-        $item = InventoryItem::create(['name' => 'Bun', 'unit' => 'pcs', 'cost_per_unit' => 15, 'current_stock' => 50]);
+        $item = InventoryItem::create(['name' => 'Bun', 'unit' => 'pcs', 'current_stock' => 50]);
 
         $response = $this->withHeaders($this->authHeaders())->postJson('/api/v1/consumptions', [
             'inventory_item_id' => $item->id,
@@ -33,7 +33,7 @@ class ManualConsumptionTest extends TestCase
 
     public function test_consumption_insufficient_stock(): void
     {
-        $item = InventoryItem::create(['name' => 'Bun', 'unit' => 'pcs', 'cost_per_unit' => 15, 'current_stock' => 3]);
+        $item = InventoryItem::create(['name' => 'Bun', 'unit' => 'pcs', 'current_stock' => 3]);
 
         $response = $this->withHeaders($this->authHeaders())->postJson('/api/v1/consumptions', [
             'inventory_item_id' => $item->id,
@@ -58,7 +58,7 @@ class ManualConsumptionTest extends TestCase
 
     public function test_list_consumptions(): void
     {
-        $item = InventoryItem::create(['name' => 'Bun', 'unit' => 'pcs', 'cost_per_unit' => 15, 'current_stock' => 50]);
+        $item = InventoryItem::create(['name' => 'Bun', 'unit' => 'pcs', 'current_stock' => 50]);
 
         $this->withHeaders($this->authHeaders())->postJson('/api/v1/consumptions', [
             'inventory_item_id' => $item->id,

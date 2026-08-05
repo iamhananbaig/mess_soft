@@ -35,15 +35,15 @@ class DemoDataSeeder extends Seeder
         $shawarma = MenuItem::create(['category_id' => $burgers->id, 'name' => 'Shawarma', 'price' => 200, 'description' => 'Chicken shawarma wrap']);
 
         // Inventory Items
-        $bun = InventoryItem::create(['name' => 'Bun', 'unit' => 'pcs', 'current_stock' => 100, 'cost_per_unit' => 15]);
-        $chickenPatty = InventoryItem::create(['name' => 'Chicken Patty', 'unit' => 'pcs', 'current_stock' => 50, 'cost_per_unit' => 80]);
-        $beefPatty = InventoryItem::create(['name' => 'Beef Patty', 'unit' => 'pcs', 'current_stock' => 50, 'cost_per_unit' => 100]);
-        $lettuce = InventoryItem::create(['name' => 'Lettuce', 'unit' => 'g', 'current_stock' => 2000, 'cost_per_unit' => 1]);
-        $sauce = InventoryItem::create(['name' => 'Sauce', 'unit' => 'ml', 'current_stock' => 5000, 'cost_per_unit' => 1]);
-        $cokeBottle = InventoryItem::create(['name' => 'Coke 500ml', 'unit' => 'bottle', 'current_stock' => 60, 'cost_per_unit' => 40]);
-        $potato = InventoryItem::create(['name' => 'Potato', 'unit' => 'kg', 'current_stock' => 20, 'cost_per_unit' => 80]);
-        $shawarmaBread = InventoryItem::create(['name' => 'Shawarma Bread', 'unit' => 'pcs', 'current_stock' => 30, 'cost_per_unit' => 10]);
-        $shawarmaMeat = InventoryItem::create(['name' => 'Shawarma Meat', 'unit' => 'g', 'current_stock' => 3000, 'cost_per_unit' => 2]);
+        $bun = InventoryItem::create(['name' => 'Bun', 'unit' => 'pcs', 'current_stock' => 100]);
+        $chickenPatty = InventoryItem::create(['name' => 'Chicken Patty', 'unit' => 'pcs', 'current_stock' => 50]);
+        $beefPatty = InventoryItem::create(['name' => 'Beef Patty', 'unit' => 'pcs', 'current_stock' => 50]);
+        $lettuce = InventoryItem::create(['name' => 'Lettuce', 'unit' => 'g', 'current_stock' => 2000]);
+        $sauce = InventoryItem::create(['name' => 'Sauce', 'unit' => 'ml', 'current_stock' => 5000]);
+        $cokeBottle = InventoryItem::create(['name' => 'Coke 500ml', 'unit' => 'bottle', 'current_stock' => 60]);
+        $potato = InventoryItem::create(['name' => 'Potato', 'unit' => 'kg', 'current_stock' => 20]);
+        $shawarmaBread = InventoryItem::create(['name' => 'Shawarma Bread', 'unit' => 'pcs', 'current_stock' => 30]);
+        $shawarmaMeat = InventoryItem::create(['name' => 'Shawarma Meat', 'unit' => 'g', 'current_stock' => 3000]);
 
         // Recipes
         // Chicken Burger: 1 bun, 1 chicken patty, lettuce, sauce

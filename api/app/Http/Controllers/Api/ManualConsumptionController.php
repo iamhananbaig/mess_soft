@@ -39,6 +39,7 @@ class ManualConsumptionController extends Controller
             StockMovement::create([
                 'inventory_item_id' => $item->id,
                 'type' => 'out',
+                'source' => 'manual',
                 'quantity' => -$validated['quantity'],
                 'note' => $validated['reason'],
                 'user_id' => $request->user()->id,

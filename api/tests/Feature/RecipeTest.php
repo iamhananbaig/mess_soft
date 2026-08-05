@@ -14,8 +14,8 @@ class RecipeTest extends TestCase
     {
         $cat = Category::create(['name' => 'Burgers']);
         $item = MenuItem::create(['category_id' => $cat->id, 'name' => 'Burger', 'price' => 300]);
-        $bun = InventoryItem::create(['name' => 'Bun', 'unit' => 'pcs', 'cost_per_unit' => 15, 'current_stock' => 50]);
-        $patty = InventoryItem::create(['name' => 'Patty', 'unit' => 'pcs', 'cost_per_unit' => 80, 'current_stock' => 20]);
+        $bun = InventoryItem::create(['name' => 'Bun', 'unit' => 'pcs', 'current_stock' => 50]);
+        $patty = InventoryItem::create(['name' => 'Patty', 'unit' => 'pcs', 'current_stock' => 20]);
 
         Recipe::create(['menu_item_id' => $item->id, 'inventory_item_id' => $bun->id, 'quantity' => 1]);
         Recipe::create(['menu_item_id' => $item->id, 'inventory_item_id' => $patty->id, 'quantity' => 1]);
@@ -30,7 +30,7 @@ class RecipeTest extends TestCase
     {
         $cat = Category::create(['name' => 'Burgers']);
         $item = MenuItem::create(['category_id' => $cat->id, 'name' => 'Burger', 'price' => 300]);
-        $bun = InventoryItem::create(['name' => 'Bun', 'unit' => 'pcs', 'cost_per_unit' => 15, 'current_stock' => 50]);
+        $bun = InventoryItem::create(['name' => 'Bun', 'unit' => 'pcs', 'current_stock' => 50]);
 
         $response = $this->withHeaders($this->authHeaders())->postJson("/api/v1/menu/{$item->id}/recipe", [
             'inventory_item_id' => $bun->id,
@@ -49,7 +49,7 @@ class RecipeTest extends TestCase
     {
         $cat = Category::create(['name' => 'Burgers']);
         $item = MenuItem::create(['category_id' => $cat->id, 'name' => 'Burger', 'price' => 300]);
-        $bun = InventoryItem::create(['name' => 'Bun', 'unit' => 'pcs', 'cost_per_unit' => 15, 'current_stock' => 50]);
+        $bun = InventoryItem::create(['name' => 'Bun', 'unit' => 'pcs', 'current_stock' => 50]);
         Recipe::create(['menu_item_id' => $item->id, 'inventory_item_id' => $bun->id, 'quantity' => 1]);
 
         $response = $this->withHeaders($this->authHeaders())->postJson("/api/v1/menu/{$item->id}/recipe", [
@@ -64,7 +64,7 @@ class RecipeTest extends TestCase
     {
         $cat = Category::create(['name' => 'Burgers']);
         $item = MenuItem::create(['category_id' => $cat->id, 'name' => 'Burger', 'price' => 300]);
-        $bun = InventoryItem::create(['name' => 'Bun', 'unit' => 'pcs', 'cost_per_unit' => 15, 'current_stock' => 50]);
+        $bun = InventoryItem::create(['name' => 'Bun', 'unit' => 'pcs', 'current_stock' => 50]);
         $recipe = Recipe::create(['menu_item_id' => $item->id, 'inventory_item_id' => $bun->id, 'quantity' => 1]);
 
         $response = $this->withHeaders($this->authHeaders())->putJson("/api/v1/recipes/{$recipe->id}", [
@@ -79,7 +79,7 @@ class RecipeTest extends TestCase
     {
         $cat = Category::create(['name' => 'Burgers']);
         $item = MenuItem::create(['category_id' => $cat->id, 'name' => 'Burger', 'price' => 300]);
-        $bun = InventoryItem::create(['name' => 'Bun', 'unit' => 'pcs', 'cost_per_unit' => 15, 'current_stock' => 50]);
+        $bun = InventoryItem::create(['name' => 'Bun', 'unit' => 'pcs', 'current_stock' => 50]);
         $recipe = Recipe::create(['menu_item_id' => $item->id, 'inventory_item_id' => $bun->id, 'quantity' => 1]);
 
         $response = $this->withHeaders($this->authHeaders())->deleteJson("/api/v1/recipes/{$recipe->id}");

@@ -117,7 +117,7 @@ Any authenticated user. Returns user + roles + permissions.
 
 ```json
 // POST /inventory body (create item)
-{ "name": "Bun", "unit": "pcs", "cost_per_unit": 15, "current_stock": 100 }
+{ "name": "Bun", "unit": "pcs", "current_stock": 100 }
 
 // POST /inventory/stock-in body
 { "inventory_item_id": 1, "quantity": 50, "reference": "PO-001", "note": "Weekly restock" }
@@ -146,13 +146,16 @@ Any authenticated user. Returns user + roles + permissions.
   "items": [
     { "menu_item_id": 1, "quantity": 2 },
     { "menu_item_id": 5, "quantity": 1 }
-  ]
+  ],
+  "amount_received": 500
 }
 
 // POST /sales response 200
 {
   "id": 42,
   "total_amount": 450,
+  "amount_received": 500,
+  "change": 50,
   "items": [
     { "menu_item_id": 1, "quantity": 2, "unit_price": 200 },
     { "menu_item_id": 5, "quantity": 1, "unit_price": 50 }
@@ -206,7 +209,7 @@ Any authenticated user. Returns user + roles + permissions.
 
 // GET /reports/stock
 [
-  { "id": 1, "name": "Bun", "current_stock": 48, "cost_per_unit": 15, "total_value": 720 }
+  { "id": 1, "name": "Bun", "current_stock": 48 }
 ]
 ```
 
@@ -234,19 +237,45 @@ Any authenticated user. Returns user + roles + permissions.
 
 | Permission | Roles |
 |------------|-------|
-| `pos:use` | super-admin, admin, manager, cashier |
+| `pos:use` | super-admin, admin, manager, cashier, employee |
 | `menu:view` | all |
 | `menu:create` | super-admin, admin |
 | `menu:edit` | super-admin, admin, manager |
 | `menu:delete` | super-admin, admin |
 | `inventory:view` | super-admin, admin, manager |
-| `inventory:stock-in` | super-admin, admin, manager |
-| `inventory:adjust` | super-admin, admin |
+| `inventory:create` | super-admin, admin, manager |
+| `inventory:edit` | super-admin, admin |
 | `recipes:manage` | super-admin, admin |
+| `sales:create` | super-admin, admin, manager, cashier, employee |
+| `sales:view` | super-admin, admin, manager, cashier, employee |
+| `consumptions:create` | super-admin, admin, manager, employee |
+| `consumptions:view` | super-admin, admin, manager, employee |
 | `reports:view` | super-admin, admin, manager |
 | `employees:view` | super-admin, admin, manager |
-| `employees:manage` | super-admin, admin |
-| `consumptions:create` | super-admin, admin, manager |
-| `consumptions:view` | super-admin, admin, manager |
-| `sales:view-own` | all |
-| `sales:view-all` | super-admin, admin, manager |
+| `employees:edit` | super-admin, admin |
+
+---
+
+## Permissions Management
+
+| Method | Endpoint | Permission |
+|--------|----------|------------|
+| GET | `/permissions` | `employees:edit` |
+| PUT | `/permissions/{role}` | `employees:edit` |
+
+```json
+// GET /permissions response
+{
+  "roles": [
+    { "id": 1, "name": "admin", "permissions": [{ "id": 1, "name": "pos:use" }, ...] }
+  ],
+  "permissions": [
+    { "id": 1, "name": "pos:use" },
+    { "id": 2, "name": "menu:view" },
+    ...
+  ]
+}
+
+// PUT /permissions/{role} body
+{ "permissions": ["pos:use", "menu:view", "sales:create"] }
+```

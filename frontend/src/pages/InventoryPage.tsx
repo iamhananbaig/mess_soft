@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import api from '@/services/api';
 import { showToast } from '@/lib/toast';
-import { formatPKR } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -16,7 +15,7 @@ import { TableSkeleton } from '@/components/TableSkeleton';
 import { EmptyState } from '@/components/EmptyState';
 import { Plus, ArrowDown, ArrowsClockwise, Warning } from '@phosphor-icons/react';
 
-interface InventoryItem { id: number; name: string; unit: string; current_stock: number; cost_per_unit: number; is_active: boolean; }
+interface InventoryItem { id: number; name: string; unit: string; current_stock: number; is_active: boolean; }
 
 export function InventoryPage() {
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -25,7 +24,7 @@ export function InventoryPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogType, setDialogType] = useState<'create' | 'stockin' | 'adjust' | 'expire'>('create');
   const [selected, setSelected] = useState<InventoryItem | null>(null);
-  const [form, setForm] = useState({ name: '', unit: '', cost_per_unit: '', current_stock: '', quantity: '', reference: '', note: '' });
+  const [form, setForm] = useState({ name: '', unit: '', current_stock: '', quantity: '', reference: '', note: '' });
   const [search, setSearch] = useState('');
   const [submitLoading, setSubmitLoading] = useState(false);
 
@@ -50,7 +49,7 @@ export function InventoryPage() {
   const openDialog = (type: typeof dialogType, item?: InventoryItem) => {
     setDialogType(type);
     setSelected(item ?? null);
-    setForm({ name: item?.name ?? '', unit: item?.unit ?? '', cost_per_unit: String(item?.cost_per_unit ?? ''), current_stock: String(item?.current_stock ?? ''), quantity: '', reference: '', note: '' });
+    setForm({ name: item?.name ?? '', unit: item?.unit ?? '', current_stock: String(item?.current_stock ?? ''), quantity: '', reference: '', note: '' });
     setDialogOpen(true);
   };
 
@@ -58,7 +57,7 @@ export function InventoryPage() {
     e.preventDefault();
     setSubmitLoading(true);
     try {
-      if (dialogType === 'create') { await api.post('/inventory', { ...form, cost_per_unit: Number(form.cost_per_unit), current_stock: Number(form.current_stock || 0) }); showToast('Inventory item created', 'success'); }
+      if (dialogType === 'create') { await api.post('/inventory', { ...form, current_stock: Number(form.current_stock || 0) }); showToast('Inventory item created', 'success'); }
       else if (dialogType === 'stockin' && selected) { await api.post('/inventory/stock-in', { inventory_item_id: selected.id, quantity: Number(form.quantity), reference: form.reference, note: form.note }); showToast('Stock added', 'success'); }
       else if (dialogType === 'adjust' && selected) { await api.post(`/inventory/${selected.id}/adjust`, { quantity: Number(form.quantity), note: form.note }); showToast('Stock adjusted', 'success'); }
       else if (dialogType === 'expire' && selected) { await api.post(`/inventory/${selected.id}/expire`, { quantity: Number(form.quantity), note: form.note }); showToast('Stock expired', 'success'); }
@@ -102,8 +101,6 @@ export function InventoryPage() {
                   <TableHead>Name</TableHead>
                   <TableHead>Unit</TableHead>
                   <TableHead>Stock</TableHead>
-                  <TableHead>Cost/Unit</TableHead>
-                  <TableHead>Value</TableHead>
                   <TableHead className="w-32">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -113,8 +110,6 @@ export function InventoryPage() {
                     <TableCell className="font-medium">{item.name}</TableCell>
                     <TableCell><Badge variant="outline">{item.unit}</Badge></TableCell>
                     <TableCell className={item.current_stock < 10 ? 'text-destructive font-semibold' : ''}>{item.current_stock}</TableCell>
-                    <TableCell>{formatPKR(item.cost_per_unit)}</TableCell>
-                    <TableCell>{formatPKR(item.current_stock * item.cost_per_unit)}</TableCell>
                     <TableCell>
                         <div className="flex gap-1">
                           <Tooltip><TooltipTrigger render={<Button variant="ghost" size="sm" onClick={() => openDialog('stockin', item)} />}>
@@ -176,7 +171,6 @@ export function InventoryPage() {
               <>
                 <FormField label="Name" required><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required /></FormField>
                 <FormField label="Unit" required><Input value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder="pcs, ml, g, kg" required /></FormField>
-                <FormField label="Cost per Unit (PKR)" required><Input type="number" value={form.cost_per_unit} onChange={(e) => setForm({ ...form, cost_per_unit: e.target.value })} required /></FormField>
                 <FormField label="Initial Stock"><Input type="number" value={form.current_stock} onChange={(e) => setForm({ ...form, current_stock: e.target.value })} /></FormField>
               </>
             )}

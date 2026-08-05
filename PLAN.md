@@ -77,7 +77,6 @@ mess_soft/
 | name | varchar(255) | e.g. "Chicken Patty", "Bun", "Coke 500ml" |
 | unit | varchar(50) | pcs, ml, g, kg, bottle |
 | current_stock | decimal(10,2) | quantity on hand |
-| cost_per_unit | bigint | in PKR, for valuation |
 | expiry_date | date | nullable, batch expiry |
 | is_active | boolean | default: true |
 | timestamps | | |

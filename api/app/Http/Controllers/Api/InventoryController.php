@@ -28,7 +28,6 @@ class InventoryController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'unit' => 'required|string|max:50',
-            'cost_per_unit' => 'required|integer|min:0',
             'current_stock' => 'sometimes|numeric|min:0',
             'expiry_date' => 'nullable|date',
         ]);
@@ -42,7 +41,6 @@ class InventoryController extends Controller
         $validated = $request->validate([
             'name' => 'sometimes|string|max:255',
             'unit' => 'sometimes|string|max:50',
-            'cost_per_unit' => 'sometimes|integer|min:0',
             'expiry_date' => 'nullable|date',
             'is_active' => 'sometimes|boolean',
         ]);
@@ -67,6 +65,7 @@ class InventoryController extends Controller
             StockMovement::create([
                 'inventory_item_id' => $item->id,
                 'type' => 'in',
+                'source' => 'stock-in',
                 'quantity' => $validated['quantity'],
                 'reference' => $validated['reference'] ?? null,
                 'note' => $validated['note'] ?? null,
@@ -96,6 +95,7 @@ class InventoryController extends Controller
             StockMovement::create([
                 'inventory_item_id' => $item->id,
                 'type' => 'adjustment',
+                'source' => 'adjustment',
                 'quantity' => $validated['quantity'],
                 'note' => $validated['note'] ?? null,
                 'user_id' => auth()->id(),
@@ -124,6 +124,7 @@ class InventoryController extends Controller
             StockMovement::create([
                 'inventory_item_id' => $item->id,
                 'type' => 'expiry',
+                'source' => 'expiry',
                 'quantity' => -$validated['quantity'],
                 'note' => $validated['note'] ?? null,
                 'user_id' => auth()->id(),

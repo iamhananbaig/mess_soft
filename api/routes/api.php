@@ -6,13 +6,14 @@ use App\Http\Controllers\Api\EmployeeController;
 use App\Http\Controllers\Api\InventoryController;
 use App\Http\Controllers\Api\ManualConsumptionController;
 use App\Http\Controllers\Api\MenuItemController;
+use App\Http\Controllers\Api\PermissionController;
 use App\Http\Controllers\Api\RecipeController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\SaleController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
-    Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
+    Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:10,1');
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('/logout', [AuthController::class, 'logout']);
@@ -89,6 +90,8 @@ Route::prefix('v1')->group(function () {
             Route::get('/reports/items', [ReportController::class, 'items']);
             Route::get('/reports/stock', [ReportController::class, 'stock']);
             Route::get('/reports/waste', [ReportController::class, 'waste']);
+            Route::get('/reports/stock-summary', [ReportController::class, 'stockSummary']);
+            Route::get('/reports/ledger', [ReportController::class, 'ledger']);
         });
 
         Route::middleware('permission:employees:view')->group(function () {
@@ -97,6 +100,11 @@ Route::prefix('v1')->group(function () {
         Route::middleware('permission:employees:edit')->group(function () {
             Route::put('/employees/{employee}', [EmployeeController::class, 'update']);
             Route::post('/employees/{employee}/role', [EmployeeController::class, 'updateRole']);
+        });
+
+        Route::middleware('permission:employees:edit')->prefix('permissions')->group(function () {
+            Route::get('/', [PermissionController::class, 'index']);
+            Route::put('/{role}', [PermissionController::class, 'update']);
         });
     });
 });

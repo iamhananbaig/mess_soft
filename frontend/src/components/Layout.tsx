@@ -9,6 +9,7 @@ import {
   ChartBar,
   UserMinus,
   Users,
+  Shield,
   SignOut,
 } from '@phosphor-icons/react';
 
@@ -19,6 +20,7 @@ const navItems = [
   { path: '/reports', label: 'Reports', permission: 'reports:view', icon: ChartBar },
   { path: '/consumptions', label: 'Consumptions', permission: 'consumptions:view', icon: UserMinus },
   { path: '/employees', label: 'Employees', permission: 'employees:view', icon: Users },
+  { path: '/permissions', label: 'Permissions', permission: 'employees:edit', icon: Shield },
 ];
 
 export function Layout() {

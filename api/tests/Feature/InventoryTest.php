@@ -9,8 +9,8 @@ class InventoryTest extends TestCase
 {
     public function test_list_inventory(): void
     {
-        InventoryItem::create(['name' => 'Bun', 'unit' => 'pcs', 'cost_per_unit' => 15, 'current_stock' => 50]);
-        InventoryItem::create(['name' => 'Patty', 'unit' => 'pcs', 'cost_per_unit' => 80, 'current_stock' => 20]);
+        InventoryItem::create(['name' => 'Bun', 'unit' => 'pcs', 'current_stock' => 50]);
+        InventoryItem::create(['name' => 'Patty', 'unit' => 'pcs', 'current_stock' => 20]);
 
         $response = $this->withHeaders($this->authHeaders())->getJson('/api/v1/inventory');
 
@@ -23,7 +23,6 @@ class InventoryTest extends TestCase
         $response = $this->withHeaders($this->authHeaders())->postJson('/api/v1/inventory', [
             'name' => 'Cheese Slice',
             'unit' => 'pcs',
-            'cost_per_unit' => 10,
             'current_stock' => 100,
         ]);
 
@@ -33,19 +32,19 @@ class InventoryTest extends TestCase
 
     public function test_update_inventory_item(): void
     {
-        $item = InventoryItem::create(['name' => 'Bun', 'unit' => 'pcs', 'cost_per_unit' => 15, 'current_stock' => 50]);
+        $item = InventoryItem::create(['name' => 'Bun', 'unit' => 'pcs', 'current_stock' => 50]);
 
         $response = $this->withHeaders($this->authHeaders())->putJson("/api/v1/inventory/{$item->id}", [
-            'cost_per_unit' => 18,
+            'name' => 'Burger Bun',
         ]);
 
         $response->assertOk();
-        $this->assertDatabaseHas('inventory_items', ['id' => $item->id, 'cost_per_unit' => 18]);
+        $this->assertDatabaseHas('inventory_items', ['id' => $item->id, 'name' => 'Burger Bun']);
     }
 
     public function test_stock_in(): void
     {
-        $item = InventoryItem::create(['name' => 'Bun', 'unit' => 'pcs', 'cost_per_unit' => 15, 'current_stock' => 50]);
+        $item = InventoryItem::create(['name' => 'Bun', 'unit' => 'pcs', 'current_stock' => 50]);
 
         $response = $this->withHeaders($this->authHeaders())->postJson('/api/v1/inventory/stock-in', [
             'inventory_item_id' => $item->id,
@@ -65,7 +64,7 @@ class InventoryTest extends TestCase
 
     public function test_adjust_stock_positive(): void
     {
-        $item = InventoryItem::create(['name' => 'Bun', 'unit' => 'pcs', 'cost_per_unit' => 15, 'current_stock' => 50]);
+        $item = InventoryItem::create(['name' => 'Bun', 'unit' => 'pcs', 'current_stock' => 50]);
 
         $response = $this->withHeaders($this->authHeaders())->postJson("/api/v1/inventory/{$item->id}/adjust", [
             'quantity' => 5,
@@ -78,7 +77,7 @@ class InventoryTest extends TestCase
 
     public function test_adjust_stock_negative(): void
     {
-        $item = InventoryItem::create(['name' => 'Bun', 'unit' => 'pcs', 'cost_per_unit' => 15, 'current_stock' => 50]);
+        $item = InventoryItem::create(['name' => 'Bun', 'unit' => 'pcs', 'current_stock' => 50]);
 
         $response = $this->withHeaders($this->authHeaders())->postJson("/api/v1/inventory/{$item->id}/adjust", [
             'quantity' => -3,
@@ -91,7 +90,7 @@ class InventoryTest extends TestCase
 
     public function test_expire_stock(): void
     {
-        $item = InventoryItem::create(['name' => 'Bun', 'unit' => 'pcs', 'cost_per_unit' => 15, 'current_stock' => 50]);
+        $item = InventoryItem::create(['name' => 'Bun', 'unit' => 'pcs', 'current_stock' => 50]);
 
         $response = $this->withHeaders($this->authHeaders())->postJson("/api/v1/inventory/{$item->id}/expire", [
             'quantity' => 5,

@@ -14,6 +14,7 @@ import { ShortcutsDialog } from '@/components/ShortcutsDialog';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { showToast } from '@/lib/toast';
 import { formatPKR } from '@/lib/format';
+import { FormField } from '@/components/FormField';
 import { ShoppingCart, Plus, Minus, X, Trash, MagnifyingGlass } from '@phosphor-icons/react';
 
 interface Category { id: number; name: string; }
@@ -30,6 +31,7 @@ export function POSPage() {
   const [loadError, setLoadError] = useState('');
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [amountReceived, setAmountReceived] = useState('');
 
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -80,15 +82,22 @@ export function POSPage() {
 
   const handleCheckout = async () => {
     if (cart.length === 0) return;
+    const received = Number(amountReceived);
+    if (!received || received < total) {
+      showToast('Amount received must be at least the total', 'error');
+      return;
+    }
     setCheckoutLoading(true);
     try {
       const saleRes = await api.post('/sales', {
         items: cart.map((c) => ({ menu_item_id: c.menu_item_id, quantity: c.quantity })),
+        amount_received: received,
       });
       const receiptRes = await api.get(`/sales/${saleRes.data.id}/receipt`);
       printReceipt(receiptRes.data as ReceiptData);
       showToast(`Sale #${saleRes.data.id} — ${formatPKR(saleRes.data.total_amount)}`, 'success');
       setCart([]);
+      setAmountReceived('');
     } catch (err: unknown) {
       const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Sale failed';
       showToast(message, 'error');
@@ -236,9 +245,26 @@ export function POSPage() {
             <span>{formatPKR(total)}</span>
           </div>
           <Separator className="my-2" />
-          <div className="flex justify-between text-lg font-bold mb-4">
+          <div className="flex justify-between text-lg font-bold mb-3">
             <span>Total</span>
             <span>{formatPKR(total)}</span>
+          </div>
+          <div className="space-y-2 mb-4">
+            <FormField label="Amount Received (PKR)" required>
+              <Input
+                type="number"
+                min={total}
+                placeholder={String(total)}
+                value={amountReceived}
+                onChange={(e) => setAmountReceived(e.target.value)}
+              />
+            </FormField>
+            {Number(amountReceived) >= total && (
+              <div className="flex justify-between text-sm font-medium text-green-600">
+                <span>Change</span>
+                <span>{formatPKR(Number(amountReceived) - total)}</span>
+              </div>
+            )}
           </div>
           <Button
             className="w-full bg-accent hover:bg-accent/90 text-accent-foreground"

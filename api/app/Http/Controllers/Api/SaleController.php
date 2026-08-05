@@ -20,6 +20,7 @@ class SaleController extends Controller
             'items' => 'required|array|min:1',
             'items.*.menu_item_id' => 'required|exists:menu_items,id',
             'items.*.quantity' => 'required|integer|min:1',
+            'amount_received' => 'required|integer|min:0',
         ]);
 
         return DB::transaction(function () use ($validated, $request) {
@@ -58,10 +59,18 @@ class SaleController extends Controller
                 $totalAmount += $menuItem->price * $item['quantity'];
             }
 
+            if ($validated['amount_received'] < $totalAmount) {
+                abort(422, 'Amount received must be greater than or equal to total');
+            }
+
+            $change = $validated['amount_received'] - $totalAmount;
+
             $sale = Sale::create([
                 'user_id' => $request->user()->id,
                 'total_amount' => $totalAmount,
                 'payment_method' => 'cash',
+                'amount_received' => $validated['amount_received'],
+                'change' => $change,
             ]);
 
             foreach ($validated['items'] as $item) {
@@ -82,6 +91,7 @@ class SaleController extends Controller
                     StockMovement::create([
                         'inventory_item_id' => $inventory->id,
                         'type' => 'out',
+                        'source' => 'sale',
                         'quantity' => -$needed,
                         'note' => "Sale #{$sale->id}",
                         'user_id' => $request->user()->id,
@@ -92,6 +102,8 @@ class SaleController extends Controller
             return response()->json([
                 'id' => $sale->id,
                 'total_amount' => $sale->total_amount,
+                'amount_received' => $sale->amount_received,
+                'change' => $sale->change,
                 'items' => $sale->items()->with('menuItem')->get(),
             ], 201);
         });
@@ -123,7 +135,6 @@ class SaleController extends Controller
     public function receipt(Sale $sale): JsonResponse
     {
         $sale->load(['items.menuItem', 'user']);
-        $isCash = $sale->payment_method === 'cash';
 
         return response()->json([
             'canteen_name' => 'ISLAMABAD DIAGNOSTIC CENTRE PVT LTD',
@@ -140,8 +151,8 @@ class SaleController extends Controller
             ]),
             'total' => $sale->total_amount,
             'payment_method' => ucfirst($sale->payment_method),
-            'amount_received' => $isCash ? $sale->total_amount : null,
-            'change' => $isCash ? 0 : null,
+            'amount_received' => $sale->amount_received,
+            'change' => $sale->change,
         ]);
     }
 }

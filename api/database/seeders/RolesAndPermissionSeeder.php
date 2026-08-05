@@ -65,7 +65,10 @@ class RolesAndPermissionSeeder extends Seeder
         ]);
 
         $employee->givePermissionTo([
+            'pos:use',
             'menu:view',
+            'sales:create', 'sales:view',
+            'consumptions:create', 'consumptions:view',
         ]);
     }
 }

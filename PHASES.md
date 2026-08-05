@@ -191,7 +191,7 @@ php artisan make:controller Api/ReportController
 ```
 - `daily()` — date param, sum sales, count transactions, items sold
 - `items()` — group sale_items by menu_item, count quantity
-- `stock()` — all inventory_items with current_stock × cost_per_unit
+- `stock()` — all inventory_items with current_stock
 - `waste()` — stock_movements where type=expiry + manual_consumptions grouped by date
 
 ### 4.2 Routes
