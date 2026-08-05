@@ -376,7 +376,7 @@ export function ReportsPage() {
         {/* === LEDGER TAB === */}
         <TabsContent value="ledger">
           <div className="flex items-center gap-3 mb-4">
-            <Select value={selectedItemId} onValueChange={setSelectedItemId}>
+            <Select value={selectedItemId} onValueChange={(value) => setSelectedItemId(value ?? '')}>
               <SelectTrigger className="w-64">
                 <SelectValue placeholder="Select item">{ledgerItems.find((i) => String(i.id) === selectedItemId)?.name}</SelectValue>
               </SelectTrigger>
