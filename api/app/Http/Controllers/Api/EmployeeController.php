@@ -17,6 +17,10 @@ class EmployeeController extends Controller
 
     public function update(Request $request, User $employee): JsonResponse
     {
+        if ($request->user()->id === $employee->id) {
+            return response()->json(['message' => 'Cannot modify your own account'], 422);
+        }
+
         $validated = $request->validate([
             'name' => 'sometimes|string|max:255',
             'is_active' => 'sometimes|boolean',
@@ -28,6 +32,10 @@ class EmployeeController extends Controller
 
     public function updateRole(Request $request, User $employee): JsonResponse
     {
+        if ($request->user()->id === $employee->id) {
+            return response()->json(['message' => 'Cannot change your own role'], 422);
+        }
+
         $validated = $request->validate([
             'role' => 'required|string|exists:roles,name',
         ]);

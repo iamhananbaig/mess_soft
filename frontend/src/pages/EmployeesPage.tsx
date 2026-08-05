@@ -1,15 +1,19 @@
 import { useState, useEffect, useMemo } from 'react';
 import api from '@/services/api';
+import { showToast } from '@/lib/toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { MagnifyingGlass, PencilSimple, UserMinus, UserPlus } from '@phosphor-icons/react';
+import { PageHeader } from '@/components/PageHeader';
+import { SearchInput } from '@/components/SearchInput';
+import { FormField } from '@/components/FormField';
+import { TableSkeleton } from '@/components/TableSkeleton';
+import { EmptyState } from '@/components/EmptyState';
+import { StatusBadge } from '@/components/StatusBadge';
+import { PencilSimple, UserMinus, UserPlus } from '@phosphor-icons/react';
 
 interface Employee { id: number; name: string; email: string; is_active: boolean; roles: { name: string }[]; }
 
@@ -22,6 +26,7 @@ export function EmployeesPage() {
   const [selected, setSelected] = useState<Employee | null>(null);
   const [form, setForm] = useState({ name: '', role: '' });
   const [search, setSearch] = useState('');
+  const [submitLoading, setSubmitLoading] = useState(false);
 
   const filtered = useMemo(() =>
     employees.filter((e) =>
@@ -30,7 +35,7 @@ export function EmployeesPage() {
       e.roles[0]?.name?.toLowerCase().includes(search.toLowerCase())
     ), [employees, search]);
 
-  const load = () => { api.get('/employees').then((r) => { setEmployees(r.data.data ?? r.data); setLoading(false); }); };
+  const load = () => { api.get('/employees').then((r) => { setEmployees(r.data.data ?? r.data); }).catch(() => {}).finally(() => { setLoading(false); }); };
   useEffect(() => { load(); }, []);
 
   const openEdit = (emp: Employee) => {
@@ -41,43 +46,42 @@ export function EmployeesPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (selected) {
-      await api.put(`/employees/${selected.id}`, { name: form.name });
-      if (form.role) {
-        await api.post(`/employees/${selected.id}/role`, { role: form.role });
+    setSubmitLoading(true);
+    try {
+      if (selected) {
+        await api.put(`/employees/${selected.id}`, { name: form.name });
+        if (form.role) {
+          await api.post(`/employees/${selected.id}/role`, { role: form.role });
+        }
       }
+      setDialogOpen(false);
+      load();
+    } catch {
+      showToast('Failed to update employee', 'error');
+    } finally {
+      setSubmitLoading(false);
     }
-    setDialogOpen(false);
-    load();
   };
 
   const toggleActive = async (emp: Employee) => {
-    await api.put(`/employees/${emp.id}`, { is_active: !emp.is_active });
-    load();
+    setSubmitLoading(true);
+    try {
+      await api.put(`/employees/${emp.id}`, { is_active: !emp.is_active });
+      load();
+    } catch {
+      showToast('Failed to update employee', 'error');
+    } finally {
+      setSubmitLoading(false);
+    }
   };
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold mb-6">Employee Management</h1>
-
-      <div className="mb-4">
-        <div className="relative max-w-sm">
-          <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-          <Input placeholder="Search employees..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
-        </div>
-      </div>
-
-      {loading ? (
-        <div className="space-y-2">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="flex gap-4 p-3">
-              <Skeleton className="h-4 w-32" />
-              <Skeleton className="h-4 w-40" />
-              <Skeleton className="h-4 w-20" />
-              <Skeleton className="h-4 w-16" />
-            </div>
-          ))}
-        </div>
+    <TooltipProvider>
+    <div className="flex flex-col gap-6 p-6">
+      <PageHeader title="Employee Management" description="Manage staff accounts and roles" />
+      <SearchInput value={search} onChange={setSearch} placeholder="Search employees..." />
+      {loading ? <TableSkeleton columns={5} /> : filtered.length === 0 ? (
+        <EmptyState title={search ? 'No employees match your search' : 'No employees found'} description={search ? 'Try a different search term' : 'Add your first employee'} />
       ) : (
         <Table>
           <TableHeader>
@@ -86,35 +90,25 @@ export function EmployeesPage() {
               <TableHead>Email</TableHead>
               <TableHead>Role</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="w-32">Actions</TableHead>
+              <TableHead className="w-24">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filtered.length === 0 ? (
-              <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">
-                {search ? 'No employees match your search' : 'No employees found'}
-              </TableCell></TableRow>
-            ) : filtered.map((emp) => (
+            {filtered.map((emp) => (
               <TableRow key={emp.id}>
                 <TableCell className="font-medium">{emp.name}</TableCell>
-                <TableCell>{emp.email}</TableCell>
-                <TableCell><Badge variant="outline">{emp.roles[0]?.name ?? 'none'}</Badge></TableCell>
+                <TableCell className="text-muted-foreground">{emp.email}</TableCell>
+                <TableCell><StatusBadge status={emp.roles[0]?.name ?? 'none'} /></TableCell>
+                <TableCell><StatusBadge status={emp.is_active ? 'Active' : 'Inactive'} /></TableCell>
                 <TableCell>
-                  <Badge variant={emp.is_active ? 'default' : 'secondary'}>
-                    {emp.is_active ? 'Active' : 'Inactive'}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <TooltipProvider>
                     <div className="flex gap-1">
                       <Tooltip><TooltipTrigger render={<Button variant="ghost" size="sm" onClick={() => openEdit(emp)} />}>
-                          <PencilSimple className="size-4" />
+                        <PencilSimple className="size-4" />
                       </TooltipTrigger><TooltipContent>Edit</TooltipContent></Tooltip>
-                      <Tooltip><TooltipTrigger render={<Button variant="ghost" size="sm" onClick={() => toggleActive(emp)} />}>
-                          {emp.is_active ? <UserMinus className="size-4" /> : <UserPlus className="size-4" />}
+                      <Tooltip><TooltipTrigger render={<Button variant="ghost" size="sm" onClick={() => toggleActive(emp)} disabled={submitLoading} />}>
+                        {emp.is_active ? <UserMinus className="size-4" /> : <UserPlus className="size-4" />}
                       </TooltipTrigger><TooltipContent>{emp.is_active ? 'Deactivate' : 'Activate'}</TooltipContent></Tooltip>
                     </div>
-                  </TooltipProvider>
                 </TableCell>
               </TableRow>
             ))}
@@ -126,23 +120,22 @@ export function EmployeesPage() {
         <DialogContent>
           <DialogHeader><DialogTitle>Edit Employee</DialogTitle></DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label>Name</Label>
+            <FormField label="Name" required>
               <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-            </div>
-            <div className="space-y-2">
-              <Label>Role</Label>
+            </FormField>
+            <FormField label="Role">
               <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v ?? '' })}>
                 <SelectTrigger><SelectValue placeholder="Select role">{form.role || undefined}</SelectValue></SelectTrigger>
                 <SelectContent>
                   {ROLES.map((r) => (<SelectItem key={r} value={r}>{r}</SelectItem>))}
                 </SelectContent>
               </Select>
-            </div>
-            <DialogFooter><Button type="submit">Update</Button></DialogFooter>
+            </FormField>
+            <DialogFooter><Button type="submit" className="bg-accent hover:bg-accent/90 text-accent-foreground" disabled={submitLoading}>Update</Button></DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
     </div>
+    </TooltipProvider>
   );
 }

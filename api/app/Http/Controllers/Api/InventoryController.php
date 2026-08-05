@@ -86,6 +86,11 @@ class InventoryController extends Controller
 
         return DB::transaction(function () use ($validated, $inventoryItem) {
             $item = InventoryItem::lockForUpdate()->findOrFail($inventoryItem->id);
+
+            if ($item->current_stock + $validated['quantity'] < 0) {
+                return response()->json(['message' => 'Insufficient stock for adjustment'], 422);
+            }
+
             $item->increment('current_stock', $validated['quantity']);
 
             StockMovement::create([
@@ -109,6 +114,11 @@ class InventoryController extends Controller
 
         return DB::transaction(function () use ($validated, $inventoryItem) {
             $item = InventoryItem::lockForUpdate()->findOrFail($inventoryItem->id);
+
+            if ($item->current_stock < $validated['quantity']) {
+                return response()->json(['message' => 'Insufficient stock for expiry'], 422);
+            }
+
             $item->decrement('current_stock', $validated['quantity']);
 
             StockMovement::create([

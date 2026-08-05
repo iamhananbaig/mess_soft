@@ -10,55 +10,62 @@ class RolesAndPermissionSeeder extends Seeder
 {
     public function run(): void
     {
-        // Reset cached roles and permissions
         app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
 
-        // Permissions
         $permissions = [
             'pos:use',
+            'categories:view', 'categories:create', 'categories:edit', 'categories:delete',
             'menu:view', 'menu:create', 'menu:edit', 'menu:delete',
-            'inventory:view', 'inventory:stock-in', 'inventory:adjust',
             'recipes:manage',
-            'reports:view',
-            'employees:view', 'employees:manage',
+            'inventory:view', 'inventory:create', 'inventory:edit',
+            'sales:create', 'sales:view',
             'consumptions:create', 'consumptions:view',
-            'sales:view-own', 'sales:view-all',
+            'reports:view',
+            'employees:view', 'employees:edit',
         ];
 
         foreach ($permissions as $perm) {
             Permission::create(['name' => $perm]);
         }
 
-        // Roles
         $superAdmin = Role::create(['name' => 'super-admin']);
         $admin = Role::create(['name' => 'admin']);
         $manager = Role::create(['name' => 'manager']);
         $cashier = Role::create(['name' => 'cashier']);
         $employee = Role::create(['name' => 'employee']);
 
-        // Role → Permissions
         $superAdmin->givePermissionTo(Permission::all());
 
         $admin->givePermissionTo([
-            'pos:use', 'menu:view', 'menu:create', 'menu:edit', 'menu:delete',
-            'inventory:view', 'inventory:stock-in', 'inventory:adjust',
-            'recipes:manage', 'reports:view', 'employees:view', 'employees:manage',
-            'consumptions:create', 'consumptions:view', 'sales:view-own', 'sales:view-all',
+            'pos:use',
+            'categories:view', 'categories:create', 'categories:edit', 'categories:delete',
+            'menu:view', 'menu:create', 'menu:edit', 'menu:delete',
+            'recipes:manage',
+            'inventory:view', 'inventory:create', 'inventory:edit',
+            'sales:create', 'sales:view',
+            'consumptions:create', 'consumptions:view',
+            'reports:view',
+            'employees:view', 'employees:edit',
         ]);
 
         $manager->givePermissionTo([
-            'pos:use', 'menu:view', 'menu:edit',
-            'inventory:view', 'inventory:stock-in',
-            'reports:view', 'employees:view',
-            'consumptions:create', 'consumptions:view', 'sales:view-own', 'sales:view-all',
+            'pos:use',
+            'menu:view', 'menu:edit',
+            'inventory:view', 'inventory:create',
+            'sales:create', 'sales:view',
+            'consumptions:create', 'consumptions:view',
+            'reports:view',
+            'employees:view',
         ]);
 
         $cashier->givePermissionTo([
-            'pos:use', 'menu:view', 'sales:view-own',
+            'pos:use',
+            'menu:view',
+            'sales:create', 'sales:view',
         ]);
 
         $employee->givePermissionTo([
-            'menu:view', 'sales:view-own',
+            'menu:view',
         ]);
     }
 }

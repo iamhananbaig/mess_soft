@@ -23,24 +23,38 @@ class SaleController extends Controller
         ]);
 
         return DB::transaction(function () use ($validated, $request) {
-            foreach ($validated['items'] as $item) {
-                $menuItem = MenuItem::with('recipes.inventoryItem')->findOrFail($item['menu_item_id']);
+            $menuItemIds = array_column($validated['items'], 'menu_item_id');
+            $menuItems = MenuItem::with('recipes.inventoryItem')
+                ->whereIn('id', $menuItemIds)
+                ->get()
+                ->keyBy('id');
 
+            $inventoryIds = [];
+            foreach ($validated['items'] as $item) {
+                $menuItem = $menuItems[$item['menu_item_id']];
+                foreach ($menuItem->recipes as $recipe) {
+                    $inventoryIds[] = $recipe->inventory_item_id;
+                }
+            }
+            $inventoryItems = InventoryItem::lockForUpdate()
+                ->whereIn('id', array_unique($inventoryIds))
+                ->get()
+                ->keyBy('id');
+
+            foreach ($validated['items'] as $item) {
+                $menuItem = $menuItems[$item['menu_item_id']];
                 foreach ($menuItem->recipes as $recipe) {
                     $needed = $recipe->quantity * $item['quantity'];
-                    $inventory = $recipe->inventoryItem;
-
+                    $inventory = $inventoryItems[$recipe->inventory_item_id];
                     if ($inventory->current_stock < $needed) {
-                        return response()->json([
-                            'message' => "Insufficient stock for {$inventory->name}",
-                        ], 422);
+                        abort(422, "Insufficient stock for {$inventory->name}");
                     }
                 }
             }
 
             $totalAmount = 0;
             foreach ($validated['items'] as $item) {
-                $menuItem = MenuItem::findOrFail($item['menu_item_id']);
+                $menuItem = $menuItems[$item['menu_item_id']];
                 $totalAmount += $menuItem->price * $item['quantity'];
             }
 
@@ -51,7 +65,7 @@ class SaleController extends Controller
             ]);
 
             foreach ($validated['items'] as $item) {
-                $menuItem = MenuItem::findOrFail($item['menu_item_id']);
+                $menuItem = $menuItems[$item['menu_item_id']];
 
                 SaleItem::create([
                     'sale_id' => $sale->id,
@@ -62,7 +76,7 @@ class SaleController extends Controller
 
                 foreach ($menuItem->recipes as $recipe) {
                     $needed = $recipe->quantity * $item['quantity'];
-                    $inventory = InventoryItem::lockForUpdate()->findOrFail($recipe->inventory_item_id);
+                    $inventory = $inventoryItems[$recipe->inventory_item_id];
                     $inventory->decrement('current_stock', $needed);
 
                     StockMovement::create([
@@ -109,20 +123,25 @@ class SaleController extends Controller
     public function receipt(Sale $sale): JsonResponse
     {
         $sale->load(['items.menuItem', 'user']);
+        $isCash = $sale->payment_method === 'cash';
 
         return response()->json([
-            'canteen_name' => 'Canteen',
+            'canteen_name' => 'ISLAMABAD DIAGNOSTIC CENTRE PVT LTD',
+            'branch_name' => 'Main Branch',
+            'date' => $sale->created_at->timezone('Asia/Karachi')->format('d-M-Y'),
+            'time' => $sale->created_at->timezone('Asia/Karachi')->format('h:i A'),
             'receipt_number' => str_pad($sale->id, 6, '0', STR_PAD_LEFT),
-            'date' => $sale->created_at->timezone('Asia/Karachi')->format('Y-m-d H:i'),
             'cashier' => $sale->user->name,
             'items' => $sale->items->map(fn($item) => [
                 'name' => $item->menuItem->name,
                 'quantity' => $item->quantity,
-                'unit_price' => $item->unit_price,
+                'rate' => $item->unit_price,
                 'amount' => $item->unit_price * $item->quantity,
             ]),
             'total' => $sale->total_amount,
             'payment_method' => ucfirst($sale->payment_method),
+            'amount_received' => $isCash ? $sale->total_amount : null,
+            'change' => $isCash ? 0 : null,
         ]);
     }
 }

@@ -44,6 +44,9 @@ class CategoryController extends Controller
 
     public function destroy(Category $category): JsonResponse
     {
+        if ($category->menuItems()->count() > 0) {
+            return response()->json(['message' => 'Cannot delete category with menu items'], 422);
+        }
         $category->delete();
         return response()->json(['message' => 'Category deleted']);
     }

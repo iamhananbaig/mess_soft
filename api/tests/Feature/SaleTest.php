@@ -131,7 +131,7 @@ class SaleTest extends TestCase
         $response = $this->withHeaders($this->authHeaders())->getJson("/api/v1/sales/{$saleId}/receipt");
 
         $response->assertOk()->assertJsonStructure([
-            'canteen_name', 'receipt_number', 'date', 'cashier', 'items', 'total', 'payment_method',
+            'canteen_name', 'branch_name', 'date', 'time', 'receipt_number', 'cashier', 'items', 'total', 'payment_method', 'amount_received', 'change',
         ]);
         $this->assertEquals(120, $response->json('total'));
     }

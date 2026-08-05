@@ -17,6 +17,7 @@ class ReportController extends Controller
 {
     public function daily(Request $request): JsonResponse
     {
+        $request->validate(['date' => 'nullable|date_format:Y-m-d']);
         $date = $request->date ? Carbon::parse($request->date) : Carbon::today();
 
         $sales = Sale::whereDate('created_at', $date);
@@ -25,16 +26,29 @@ class ReportController extends Controller
         $totalTransactions = (clone $sales)->count();
         $itemsSold = SaleItem::whereHas('sale', fn($q) => $q->whereDate('created_at', $date))->sum('quantity');
 
+        $items = SaleItem::select(
+                'menu_item_id',
+                DB::raw('SUM(quantity) as total_quantity'),
+                DB::raw('SUM(quantity * unit_price) as total_revenue')
+            )
+            ->whereHas('sale', fn($q) => $q->whereDate('created_at', $date))
+            ->groupBy('menu_item_id')
+            ->with('menuItem:id,name')
+            ->orderByDesc('total_quantity')
+            ->get();
+
         return response()->json([
             'date' => $date->format('Y-m-d'),
             'total_sales' => $totalSales,
             'total_transactions' => $totalTransactions,
             'items_sold' => $itemsSold,
+            'items' => $items,
         ]);
     }
 
     public function items(Request $request): JsonResponse
     {
+        $request->validate(['from' => 'nullable|date', 'to' => 'nullable|date']);
         $from = $request->from ? Carbon::parse($request->from) : Carbon::now()->startOfMonth();
         $to = $request->to ? Carbon::parse($request->to) : Carbon::now();
 
@@ -70,6 +84,7 @@ class ReportController extends Controller
 
     public function waste(Request $request): JsonResponse
     {
+        $request->validate(['from' => 'nullable|date', 'to' => 'nullable|date']);
         $from = $request->from ? Carbon::parse($request->from) : Carbon::now()->startOfMonth();
         $to = $request->to ? Carbon::parse($request->to) : Carbon::now();
 
@@ -98,5 +113,34 @@ class ReportController extends Controller
             ]);
 
         return response()->json(['expired' => $expired, 'manual' => $manual]);
+    }
+
+    public function receipts(Request $request): JsonResponse
+    {
+        $request->validate(['date' => 'nullable|date_format:Y-m-d']);
+        $date = $request->date ? Carbon::parse($request->date) : Carbon::today();
+
+        $sales = Sale::whereDate('created_at', $date)
+            ->with(['items' => fn($q) => $q->with('menuItem:id,name')])
+            ->orderBy('created_at')
+            ->get();
+
+        $receipts = $sales->map(fn($sale) => [
+            'id' => $sale->id,
+            'created_at' => $sale->created_at->toIso8601String(),
+            'payment_method' => $sale->payment_method,
+            'total_amount' => $sale->total_amount,
+            'items' => $sale->items->map(fn($item) => [
+                'item' => $item->menuItem->name,
+                'price' => $item->unit_price,
+                'quantity' => $item->quantity,
+                'amount' => $item->unit_price * $item->quantity,
+            ]),
+        ]);
+
+        return response()->json([
+            'date' => $date->format('Y-m-d'),
+            'receipts' => $receipts,
+        ]);
     }
 }

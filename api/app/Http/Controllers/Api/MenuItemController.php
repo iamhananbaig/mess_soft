@@ -12,10 +12,16 @@ class MenuItemController extends Controller
     public function index(Request $request): JsonResponse
     {
         $items = MenuItem::with('category')
+            ->with('recipes.inventoryItem')
             ->when($request->category_id, fn($q, $catId) => $q->where('category_id', $catId))
             ->active()
             ->orderBy('name')
-            ->get();
+            ->get()
+            ->map(fn($item) => array_merge($item->toArray(), [
+                'is_available' => $item->recipes->isEmpty() || $item->recipes->every(
+                    fn($r) => $r->inventoryItem && $r->inventoryItem->current_stock >= $r->quantity
+                ),
+            ]));
 
         return response()->json($items);
     }
