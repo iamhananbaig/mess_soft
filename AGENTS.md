@@ -10,7 +10,7 @@ Key features: recipe-based stock consumption (burger = bun + patty), manual cons
 ## Tech Stack
 - **Backend:** Laravel 13, PHP 8.3+, Sanctum 4, Spatie Permission 8
 - **Frontend:** React 19, Vite 8, TypeScript 6, TailwindCSS 4, shadcn/ui (base-mira style, phosphor icons), Axios, oxlint
-- **Database:** SQLite (`api/.env`: `DB_CONNECTION=sqlite`)
+- **Database:** SQLite for local dev (`api/.env`: `DB_CONNECTION=sqlite`); MySQL 8.4 in Docker (`.env.docker.local`)
 - **Auth:** Laravel Sanctum tokens + Spatie roles/permissions (roles: super-admin, admin, manager, cashier, employee)
 
 ## Project Layout
@@ -22,7 +22,7 @@ mess_soft/
 │   │   ├── Models/                 # 9 models (User, Category, MenuItem, InventoryItem, Recipe, Sale, SaleItem, StockMovement, ManualConsumption)
 │   │   └── Services/
 │   ├── database/
-│   │   ├── migrations/     # 17 migration files
+│   │   ├── migrations/     # 18 migration files
 │   │   └── seeders/        # DatabaseSeeder calls RolesAndPermissionSeeder + DemoDataSeeder
 │   ├── routes/api.php      # Full route tree under /api/v1 with permission middleware
 │   ├── phpunit.xml         # SQLite in-memory for tests
