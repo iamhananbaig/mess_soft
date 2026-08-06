@@ -1,31 +1,13 @@
-FROM php:8.4-fpm AS production
+FROM composer:2 AS build
+WORKDIR /app
+COPY composer.* ./
+RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
+COPY . .
 
-# System dependencies
-RUN apt-get update && apt-get install -y \
-    git curl zip unzip libpng-dev libonig-dev libxml2-dev \
-    libzip-dev libicu-dev \
-    && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip \
-    && pecl install redis && docker-php-ext-enable redis \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
-
-# Composer
-COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
-
-WORKDIR /var/www
-
-# Install dependencies
-COPY api/composer.json api/composer.lock ./
-RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
-
-# Copy application code
-COPY api/ .
-
-# Optimize
-RUN composer dump-autoload --optimize --no-dev
-
-# Set permissions
-RUN chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache \
-    && chmod -R 775 /var/www/storage /var/www/bootstrap/cache
-
-EXPOSE 9000
-CMD ["php-fpm"]
+FROM dunglas/frankenphp:1-php8.4
+WORKDIR /app
+COPY --from=build /app /app
+RUN install-php-extensions pcntl pdo_mysql mbstring bcmath gd zip
+RUN chown -R www-data:www-data storage bootstrap/cache
+EXPOSE 80
+CMD ["php", "artisan", "octane:frankenphp", "--host=0.0.0.0", "--port=80"]

@@ -1,32 +1,13 @@
-# Stage 1: Build React frontend
 FROM node:20-alpine AS frontend-build
-
 WORKDIR /app
-
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
-
 COPY frontend/ .
-
 ARG VITE_API_URL=/api/v1
 ENV VITE_API_URL=${VITE_API_URL}
-
 RUN npm run build
 
-# Stage 2: Nginx with frontend baked in
-FROM nginx:alpine
-
-# Remove default config
+FROM nginx:stable-alpine
 RUN rm /etc/nginx/conf.d/default.conf
-
-# Copy nginx config
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
-
-# Copy frontend build from stage 1
-COPY --from=frontend-build /app/dist /var/www/frontend/dist
-
-# Create directories for API (will be populated via volumes)
-RUN mkdir -p /var/www/api/public /var/www/api/storage /var/www/api/bootstrap/cache
-
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+COPY --from=frontend-build /app/dist /usr/share/nginx/html

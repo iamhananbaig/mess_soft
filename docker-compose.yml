@@ -1,75 +1,112 @@
+name: mess-soft
+
+networks:
+  internal:
+    driver: bridge
+
 services:
-  # --- MySQL ---
-  db:
-    image: mysql:8.0
-    restart: unless-stopped
-    environment:
-      MYSQL_DATABASE: ${DB_DATABASE:-mess_soft}
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root_secret}
-      MYSQL_USER: ${DB_USERNAME:-mess_user}
-      MYSQL_PASSWORD: ${DB_PASSWORD:-secret}
-    ports:
-      - "${DB_PORT:-3307}:3306"
-    volumes:
-      - db_data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # --- Laravel API (PHP-FPM) ---
-  api:
-    build:
-      context: .
-      dockerfile: api/Dockerfile
-      target: production
-    restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
-    env_file:
-      - .env.docker
-    volumes:
-      - api_storage:/var/www/storage
-      - api_cache:/var/www/bootstrap/cache
-
-  # --- Queue Worker ---
-  queue:
-    build:
-      context: .
-      dockerfile: api/Dockerfile
-      target: production
-    restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
-      api:
-        condition: service_started
-    env_file:
-      - .env.docker
-    command: ["php", "/var/www/api/artisan", "queue:work", "--tries=3", "--timeout=60"]
-    volumes:
-      - api_storage:/var/www/storage
-      - api_cache:/var/www/bootstrap/cache
-
-  # --- Nginx (serves frontend + proxies API) ---
   nginx:
     build:
       context: .
       dockerfile: docker/Dockerfile.nginx
       args:
         VITE_API_URL: ${VITE_API_URL:-/api/v1}
-    restart: unless-stopped
-    depends_on:
-      - api
+    networks:
+      - internal
     ports:
       - "${APP_PORT:-9090}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "pgrep", "nginx"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    networks:
+      - internal
+    env_file:
+      - .env.docker
     volumes:
-      - api_storage:/var/www/api/storage:ro
-      - api_cache:/var/www/api/bootstrap/cache:ro
+      - storage:/app/storage
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "php", "artisan", "octane:status"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
+  queue:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    networks:
+      - internal
+    env_file:
+      - .env.docker
+    volumes:
+      - storage:/app/storage
+    command:
+      - php
+      - artisan
+      - queue:work
+      - --sleep=3
+      - --tries=3
+      - --max-time=3600
+    healthcheck:
+      disable: true
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    networks:
+      - internal
+    env_file:
+      - .env.docker
+    volumes:
+      - storage:/app/storage
+    command:
+      - php
+      - artisan
+      - schedule:work
+    healthcheck:
+      disable: true
+    depends_on:
+      api:
+        condition: service_started
+    restart: unless-stopped
+
+  db:
+    image: mysql:8.4
+    networks:
+      - internal
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
 
 volumes:
-  db_data:
-  api_storage:
-  api_cache:
+  storage:
+  mysql-data:
