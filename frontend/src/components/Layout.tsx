@@ -1,7 +1,29 @@
 import { Outlet, useNavigate, useLocation } from 'react-router';
 import { useAuth } from '@/contexts/AuthContext';
-import { SidebarProvider, Sidebar, SidebarContent, SidebarHeader, SidebarFooter, SidebarSeparator, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuItem, SidebarMenuButton, SidebarInset, SidebarTrigger, SidebarRail } from '@/components/ui/sidebar';
-import { ThemeToggle } from '@/components/ThemeToggle';
+import {
+  SidebarProvider,
+  Sidebar,
+  SidebarContent,
+  SidebarHeader,
+  SidebarFooter,
+  SidebarInset,
+  SidebarRail,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+  SidebarTrigger,
+} from '@/components/ui/sidebar';
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb';
+import { Separator } from '@/components/ui/separator';
+import { NavMain } from '@/components/nav-main';
+import { NavUser } from '@/components/nav-user';
 import {
   ShoppingCart,
   ForkKnife,
@@ -10,7 +32,6 @@ import {
   UserMinus,
   Users,
   Shield,
-  SignOut,
 } from '@phosphor-icons/react';
 
 const navItems = [
@@ -30,6 +51,9 @@ export function Layout() {
 
   const filteredNav = navItems.filter((item) => hasPermission(item.permission));
 
+  const currentPage = navItems.find((item) => item.path === location.pathname);
+  const currentPageLabel = currentPage?.label ?? 'Page';
+
   const handleLogout = async () => {
     await logout();
     navigate('/login');
@@ -37,65 +61,51 @@ export function Layout() {
 
   return (
     <SidebarProvider>
-      <Sidebar side="left" variant="sidebar" collapsible="icon">
-        <SidebarHeader className="p-2">
-          <div className="flex items-center gap-2 px-2 py-1.5">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground">
-              <ShoppingCart className="size-4" />
-            </div>
-            <span className="truncate text-base font-semibold group-data-[collapsible=icon]:hidden">
-              Canteen POS
-            </span>
-          </div>
-        </SidebarHeader>
-        <SidebarSeparator />
-        <SidebarContent>
-          <SidebarGroup>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {filteredNav.map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <SidebarMenuItem key={item.path}>
-                      <SidebarMenuButton
-                        isActive={location.pathname === item.path}
-                        tooltip={item.label}
-                        onClick={() => navigate(item.path)}
-                      >
-                        <Icon className="size-4" />
-                        <span>{item.label}</span>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  );
-                })}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        </SidebarContent>
-        <SidebarSeparator />
-        <SidebarFooter className="p-2">
-          <div className="group-data-[collapsible=icon]:hidden px-2 py-1.5">
-            <p className="text-sm font-medium truncate">{user?.name}</p>
-            <p className="text-xs text-sidebar-foreground/60 truncate">{user?.email}</p>
-          </div>
-          <div className="group-data-[collapsible=icon]:hidden">
-            <ThemeToggle />
-          </div>
+      <Sidebar collapsible="icon">
+        <SidebarHeader>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton tooltip="Logout" onClick={handleLogout}>
-                <SignOut className="size-4" />
-                <span>Logout</span>
+              <SidebarMenuButton size="lg" onClick={() => navigate('/')}>
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+                  <ShoppingCart className="size-4" />
+                </div>
+                <div className="grid flex-1 text-left text-sm leading-tight">
+                  <span className="truncate font-semibold">Canteen POS</span>
+                  <span className="truncate text-xs text-muted-foreground">Management System</span>
+                </div>
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
+        </SidebarHeader>
+        <SidebarContent>
+          <NavMain items={filteredNav} />
+        </SidebarContent>
+        <SidebarFooter>
+          <NavUser user={{ name: user?.name ?? '', email: user?.email ?? '' }} onLogout={handleLogout} />
         </SidebarFooter>
+        <SidebarRail />
       </Sidebar>
-      <SidebarRail />
       <SidebarInset>
-        <header className="flex h-12 shrink-0 items-center gap-2 border-b px-4 md:hidden">
-          <SidebarTrigger className="-ml-1" />
-          <span className="text-sm font-semibold">Canteen POS</span>
+        <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
+          <div className="flex items-center gap-2 px-4">
+            <SidebarTrigger size="icon-lg" className="-ml-1" />
+            <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
+            <Breadcrumb>
+              <BreadcrumbList>
+                {location.pathname !== '/' && (
+                  <>
+                    <BreadcrumbItem className="hidden md:block">
+                      <BreadcrumbLink onClick={() => navigate('/')}>Home</BreadcrumbLink>
+                    </BreadcrumbItem>
+                    <BreadcrumbSeparator className="hidden md:block" />
+                  </>
+                )}
+                <BreadcrumbItem>
+                  <BreadcrumbPage>{currentPageLabel}</BreadcrumbPage>
+                </BreadcrumbItem>
+              </BreadcrumbList>
+            </Breadcrumb>
+          </div>
         </header>
         <div className="flex-1 overflow-auto">
           <Outlet />
