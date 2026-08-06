@@ -14,4 +14,6 @@ dist
 .vscode
 .DS_Store
 Thumbs.db
+api/bootstrap/cache/packages.php
+api/bootstrap/cache/services.php
 *:Zone.Identifier
