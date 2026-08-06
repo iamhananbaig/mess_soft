@@ -39,7 +39,7 @@ Any authenticated user. Returns user + roles + permissions.
 
 ```json
 // POST / PUT body
-{ "name": "Burgers", "sort_order": 1 }
+{ "name": "Burgers" }
 ```
 
 ---

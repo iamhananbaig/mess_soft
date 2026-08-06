@@ -11,7 +11,7 @@ class CategoryController extends Controller
 {
     public function index(): JsonResponse
     {
-        $categories = Category::orderBy('sort_order')->orderBy('name')->get();
+        $categories = Category::orderBy('name')->get();
         return response()->json($categories);
     }
 
@@ -19,7 +19,6 @@ class CategoryController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255|unique:categories,name',
-            'sort_order' => 'sometimes|integer|min:0',
         ]);
 
         $category = Category::create($validated);
@@ -35,7 +34,6 @@ class CategoryController extends Controller
     {
         $validated = $request->validate([
             'name' => 'sometimes|string|max:255|unique:categories,name,' . $category->id,
-            'sort_order' => 'sometimes|integer|min:0',
         ]);
 
         $category->update($validated);

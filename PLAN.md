@@ -53,7 +53,6 @@ mess_soft/
 |--------|------|-------|
 | id | bigint PK | |
 | name | varchar(255) | unique |
-| sort_order | int | default: 0 |
 | timestamps | | |
 
 ### menu_items

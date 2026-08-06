@@ -9,8 +9,8 @@ class CategoryTest extends TestCase
 {
     public function test_list_categories(): void
     {
-        Category::create(['name' => 'Drinks', 'sort_order' => 2]);
-        Category::create(['name' => 'Burgers', 'sort_order' => 1]);
+        Category::create(['name' => 'Drinks']);
+        Category::create(['name' => 'Burgers']);
 
         $response = $this->withHeaders($this->authHeaders())->getJson('/api/v1/categories');
 
@@ -24,7 +24,6 @@ class CategoryTest extends TestCase
     {
         $response = $this->withHeaders($this->authHeaders())->postJson('/api/v1/categories', [
             'name' => 'Snacks',
-            'sort_order' => 3,
         ]);
 
         $response->assertCreated()->assertJsonFragment(['name' => 'Snacks']);

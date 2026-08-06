@@ -27,9 +27,9 @@ class DemoDataSeeder extends Seeder
         $employee->assignRole('employee');
 
         // Categories
-        $burgers = Category::create(['name' => 'Burgers', 'sort_order' => 1]);
-        $drinks = Category::create(['name' => 'Drinks', 'sort_order' => 2]);
-        $snacks = Category::create(['name' => 'Snacks', 'sort_order' => 3]);
+        $burgers = Category::create(['name' => 'Burgers']);
+        $drinks = Category::create(['name' => 'Drinks']);
+        $snacks = Category::create(['name' => 'Snacks']);
 
         // Menu Items
         $chickenBurger = MenuItem::create(['category_id' => $burgers->id, 'name' => 'Chicken Burger', 'price' => 350, 'description' => 'Grilled chicken with lettuce']);

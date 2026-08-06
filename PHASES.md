@@ -74,7 +74,7 @@ php artisan make:controller Api/AuthController
 ```bash
 php artisan make:controller Api/CategoryController --resource
 ```
-Standard resource controller. Index: sortable by `sort_order`.
+Standard resource controller. Index sorted alphabetically by name.
 
 ### 2.3 MenuItemController
 ```bash

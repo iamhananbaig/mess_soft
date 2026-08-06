@@ -26,7 +26,6 @@ SQLite. All monetary values: PKR (integer). Timestamps: UTC.
 |--------|------|-------|
 | id | bigint PK | auto |
 | name | varchar(255) | unique |
-| sort_order | int | default: 0 |
 | created_at | timestamp | |
 | updated_at | timestamp | |
 

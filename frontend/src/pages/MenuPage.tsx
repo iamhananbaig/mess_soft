@@ -2,10 +2,12 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import api from '@/services/api';
 import { showToast } from '@/lib/toast';
 import { formatPKR } from '@/lib/format';
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerFooter, DrawerClose } from '@/components/ui/drawer';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -17,14 +19,14 @@ import { FormField } from '@/components/FormField';
 import { TableSkeleton } from '@/components/TableSkeleton';
 import { EmptyState } from '@/components/EmptyState';
 import { StatusBadge } from '@/components/StatusBadge';
-import { Plus, PencilSimple, Trash, X } from '@phosphor-icons/react';
+import { Plus, PencilSimple, Trash, X, ListPlus } from '@phosphor-icons/react';
+import type { Category, InventoryItem } from '@/types/api';
 
-interface Category { id: number; name: string; }
 interface MenuItem { id: number; name: string; price: number; category_id: number; is_active: boolean; description: string | null; category: Category; }
-interface InventoryItem { id: number; name: string; unit: string; }
 interface Recipe { id: number; quantity: number; inventory_item: InventoryItem; }
 
 export function MenuPage() {
+  const { hasPermission } = useAuth();
   const [items, setItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
@@ -42,6 +44,12 @@ export function MenuPage() {
   const [recipeSearch, setRecipeSearch] = useState('');
   const [recipeSubmitLoading, setRecipeSubmitLoading] = useState(false);
   const [deleteRecipeId, setDeleteRecipeId] = useState<number | null>(null);
+
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+  const [categoryForm, setCategoryForm] = useState({ name: '' });
+  const [categorySubmitLoading, setCategorySubmitLoading] = useState(false);
+  const [deleteCategoryId, setDeleteCategoryId] = useState<number | null>(null);
 
   const filtered = useMemo(() =>
     items.filter((i) =>
@@ -177,6 +185,47 @@ export function MenuPage() {
     }
   };
 
+  const openCategoryDialog = (category?: Category) => {
+    setEditingCategory(category ?? null);
+    setCategoryForm({ name: category?.name ?? '' });
+    setCategoryDialogOpen(true);
+  };
+
+  const handleCategorySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCategorySubmitLoading(true);
+    try {
+      if (editingCategory) {
+        await api.put(`/categories/${editingCategory.id}`, { name: categoryForm.name });
+        showToast('Category updated', 'success');
+      } else {
+        await api.post('/categories', { name: categoryForm.name });
+        showToast('Category created', 'success');
+      }
+      setCategoryDialogOpen(false);
+      load();
+    } catch {
+      showToast('Failed to save category', 'error');
+    } finally {
+      setCategorySubmitLoading(false);
+    }
+  };
+
+  const handleDeleteCategory = async () => {
+    if (deleteCategoryId === null) return;
+    setCategorySubmitLoading(true);
+    try {
+      await api.delete(`/categories/${deleteCategoryId}`);
+      showToast('Category deleted', 'success');
+      setDeleteCategoryId(null);
+      load();
+    } catch {
+      showToast('Failed to delete category', 'error');
+    } finally {
+      setCategorySubmitLoading(false);
+    }
+  };
+
   const inventorySearchResults = useMemo(() => {
     return inventoryItems
       .filter((i) => !recipes.some((r) => r.inventory_item.id === i.id))
@@ -189,7 +238,16 @@ export function MenuPage() {
       <PageHeader
         title="Menu Management"
         description="Manage menu items, categories, pricing, and recipes"
-        action={<Button onClick={openCreate} className="bg-accent hover:bg-accent/90 text-accent-foreground"><Plus className="size-4 mr-1" /> Add Item</Button>}
+        action={
+          <div className="flex gap-2">
+            {hasPermission('categories:view') && (
+              <Button variant="outline" onClick={() => openCategoryDialog()}>
+                <ListPlus className="size-4 mr-1" /> Categories
+              </Button>
+            )}
+            <Button onClick={openCreate} className="bg-accent hover:bg-accent/90 text-accent-foreground"><Plus className="size-4 mr-1" /> Add Item</Button>
+          </div>
+        }
       />
       <SearchInput value={search} onChange={setSearch} placeholder="Search menu items..." />
       {loading ? (
@@ -250,7 +308,7 @@ export function MenuPage() {
                 </Select>
               </FormField>
               <FormField label="Price (PKR)" required>
-                <Input type="number" min="1" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} required />
+                <Input type="text" inputMode="numeric" pattern="[0-9]*" min="1" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} required />
               </FormField>
               <FormField label="Description">
                 <textarea className="flex min-h-[60px] w-full rounded-md border border-input bg-input/20 px-3 py-2 text-xs/relaxed placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 outline-none resize-none dark:bg-input/30" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
@@ -356,6 +414,67 @@ export function MenuPage() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteRecipe} className="bg-destructive text-destructive-foreground hover:bg-destructive/90" disabled={recipeSubmitLoading}>Remove</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog open={categoryDialogOpen} onOpenChange={setCategoryDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingCategory ? 'Edit Category' : 'Add Category'}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleCategorySubmit} className="space-y-4">
+            <FormField label="Name" required>
+              <Input value={categoryForm.name} onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })} required />
+            </FormField>
+            <DialogFooter>
+              <Button type="submit" className="bg-accent hover:bg-accent/90 text-accent-foreground" disabled={categorySubmitLoading}>
+                {categorySubmitLoading && <Spinner className="size-4 mr-2" />}
+                {editingCategory ? 'Update' : 'Create'}
+              </Button>
+            </DialogFooter>
+          </form>
+
+          <Separator className="my-2" />
+
+          <div className="space-y-2">
+            <h4 className="text-sm font-semibold">Existing Categories</h4>
+            {categories.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-2">No categories yet</p>
+            ) : (
+              <div className="space-y-1">
+                {categories.map((c) => (
+                  <div key={c.id} className="flex items-center justify-between rounded-md border px-3 py-2">
+                    <span className="text-sm">{c.name}</span>
+                    <div className="flex gap-1">
+                      {hasPermission('categories:edit') && (
+                        <Button variant="ghost" size="sm" className="size-7 p-0" onClick={() => openCategoryDialog(c)}>
+                          <PencilSimple className="size-3.5" />
+                        </Button>
+                      )}
+                      {hasPermission('categories:delete') && (
+                        <Button variant="ghost" size="sm" className="size-7 p-0 text-destructive" onClick={() => setDeleteCategoryId(c.id)}>
+                          <Trash className="size-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={deleteCategoryId !== null} onOpenChange={(open) => { if (!open) setDeleteCategoryId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Category?</AlertDialogTitle>
+            <AlertDialogDescription>This category will be permanently deleted. You cannot delete a category that has menu items.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteCategory} className="bg-destructive text-destructive-foreground hover:bg-destructive/90" disabled={categorySubmitLoading}>Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
