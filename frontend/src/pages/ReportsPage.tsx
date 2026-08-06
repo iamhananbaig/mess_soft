@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import api from '@/services/api';
 import { showToast } from '@/lib/toast';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -11,9 +11,13 @@ import { TableSkeleton } from '@/components/TableSkeleton';
 import { EmptyState } from '@/components/EmptyState';
 import { DatePicker } from '@/components/DatePicker';
 import { Badge } from '@/components/ui/badge';
+import { Spinner } from '@/components/ui/spinner';
+import { ReceiptModal } from '@/components/ReceiptModal';
 import { formatPKR, formatDate, formatDateTime } from '@/lib/format';
 import { format } from 'date-fns';
-import { ArrowClockwise, TrendUp, Receipt, Package, Warning, List, StackSimple, ChartBar, Book } from '@phosphor-icons/react';
+import { ArrowClockwise, TrendUp, Receipt, Package, Warning, List, StackSimple, ChartBar, Book, Printer } from '@phosphor-icons/react';
+import type { InventoryItem } from '@/types/api';
+import type { ReceiptData as FullReceiptData } from '@/components/Receipt';
 
 interface ReceiptItem {
   item: string;
@@ -63,12 +67,6 @@ interface LedgerData {
   movements: LedgerMovement[];
 }
 
-interface InventoryItem {
-  id: number;
-  name: string;
-  unit: string;
-}
-
 export function ReportsPage() {
   const [tab, setTab] = useState('daily');
   const [dailyView, setDailyView] = useState<'items' | 'receipts'>('items');
@@ -86,6 +84,9 @@ export function ReportsPage() {
   const [selectedItemId, setSelectedItemId] = useState<string>('');
   const [ledger, setLedger] = useState<LedgerData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [printModalOpen, setPrintModalOpen] = useState(false);
+  const [printReceiptData, setPrintReceiptData] = useState<FullReceiptData | null>(null);
+  const [printingId, setPrintingId] = useState<number | null>(null);
 
   const dateStr = format(date, 'yyyy-MM-dd');
   const fromStr = format(fromDate, 'yyyy-MM-dd');
@@ -135,6 +136,19 @@ export function ReportsPage() {
   }, [tab, ledgerItems.length, selectedItemId]);
 
   useEffect(() => { load(); }, [tab, date, fromDate, toDate, selectedItemId]);
+
+  const handlePrintReceipt = useCallback(async (saleId: number) => {
+    setPrintingId(saleId);
+    try {
+      const res = await api.get(`/sales/${saleId}/receipt`);
+      setPrintReceiptData(res.data as FullReceiptData);
+      setPrintModalOpen(true);
+    } catch {
+      showToast('Failed to load receipt', 'error');
+    } finally {
+      setPrintingId(null);
+    }
+  }, []);
 
   const flatReceiptItems = receipts.flatMap((r) =>
     r.items.map((item) => ({
@@ -275,7 +289,17 @@ export function ReportsPage() {
                             <span className="text-sm text-muted-foreground">{formatDateTime(r.created_at)}</span>
                             <span className="text-xs text-muted-foreground capitalize">{r.payment_method}</span>
                           </div>
-                          <span className="text-sm font-semibold">{formatPKR(r.total_amount)}</span>
+                          <div className="flex items-center gap-3">
+                            <span className="text-sm font-semibold">{formatPKR(r.total_amount)}</span>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => handlePrintReceipt(r.id)}
+                              disabled={printingId === r.id}
+                            >
+                              {printingId === r.id ? <Spinner className="size-4" /> : <Printer className="size-4" />}
+                            </Button>
+                          </div>
                         </div>
                         <Table>
                           <TableHeader><TableRow><TableHead>Item</TableHead><TableHead className="text-right">Price</TableHead><TableHead className="text-right">Qty</TableHead><TableHead className="text-right">Amount</TableHead></TableRow></TableHeader>
@@ -295,7 +319,7 @@ export function ReportsPage() {
                   </div>
                 ) : (
                   <Table>
-                    <TableHeader><TableRow><TableHead>Receipt</TableHead><TableHead>Date & Time</TableHead><TableHead>Item</TableHead><TableHead className="text-right">Price</TableHead><TableHead className="text-right">Qty</TableHead><TableHead className="text-right">Amount</TableHead></TableRow></TableHeader>
+                    <TableHeader><TableRow><TableHead>Receipt</TableHead><TableHead>Date & Time</TableHead><TableHead>Item</TableHead><TableHead className="text-right">Price</TableHead><TableHead className="text-right">Qty</TableHead><TableHead className="text-right">Amount</TableHead><TableHead className="w-10"></TableHead></TableRow></TableHeader>
                     <TableBody>
                       {flatReceiptItems.map((r, idx) => (
                         <TableRow key={idx}>
@@ -305,6 +329,16 @@ export function ReportsPage() {
                           <TableCell className="text-right">{formatPKR(r.price)}</TableCell>
                           <TableCell className="text-right">{r.quantity}</TableCell>
                           <TableCell className="text-right">{formatPKR(r.amount)}</TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => handlePrintReceipt(r.receipt_id)}
+                              disabled={printingId === r.receipt_id}
+                            >
+                              {printingId === r.receipt_id ? <Spinner className="size-4" /> : <Printer className="size-4" />}
+                            </Button>
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -494,6 +528,11 @@ export function ReportsPage() {
           )}
         </TabsContent>
       </Tabs>
+      <ReceiptModal
+        data={printReceiptData}
+        open={printModalOpen}
+        onOpenChange={setPrintModalOpen}
+      />
     </div>
   );
 }
