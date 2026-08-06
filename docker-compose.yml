@@ -97,7 +97,7 @@ services:
       - internal
     environment:
       MYSQL_DATABASE: ${DB_DATABASE}
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     volumes:
       - mysql-data:/var/lib/mysql
     healthcheck:
