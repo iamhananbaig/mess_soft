@@ -16,8 +16,8 @@ import { showToast } from '@/lib/toast';
 import { formatPKR } from '@/lib/format';
 import { FormField } from '@/components/FormField';
 import { ShoppingCart, Plus, Minus, X, Trash, MagnifyingGlass } from '@phosphor-icons/react';
+import type { Category } from '@/types/api';
 
-interface Category { id: number; name: string; }
 interface MenuItem { id: number; name: string; price: number; category_id: number; is_available: boolean; }
 interface CartItem { menu_item_id: number; name: string; price: number; quantity: number; }
 
@@ -252,7 +252,8 @@ export function POSPage() {
           <div className="space-y-2 mb-4">
             <FormField label="Amount Received (PKR)" required>
               <Input
-                type="number"
+                type="text"
+                inputMode="decimal"
                 min={total}
                 placeholder={String(total)}
                 value={amountReceived}

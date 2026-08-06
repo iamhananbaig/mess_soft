@@ -14,8 +14,11 @@ import { FormField } from '@/components/FormField';
 import { TableSkeleton } from '@/components/TableSkeleton';
 import { EmptyState } from '@/components/EmptyState';
 import { Plus, ArrowDown, ArrowsClockwise, Warning } from '@phosphor-icons/react';
+import type { InventoryItem as BaseInventoryItem } from '@/types/api';
 
-interface InventoryItem { id: number; name: string; unit: string; current_stock: number; is_active: boolean; }
+interface InventoryItem extends BaseInventoryItem { current_stock: number; is_active: boolean; }
+
+const LOW_STOCK_THRESHOLD = 10;
 
 export function InventoryPage() {
   const [items, setItems] = useState<InventoryItem[]>([]);
@@ -70,7 +73,7 @@ export function InventoryPage() {
     }
   };
 
-  const lowStockCount = items.filter((i) => i.current_stock < 10).length;
+  const lowStockCount = items.filter((i) => i.current_stock < LOW_STOCK_THRESHOLD).length;
 
   return (
     <TooltipProvider>
@@ -109,7 +112,7 @@ export function InventoryPage() {
                   <TableRow key={item.id}>
                     <TableCell className="font-medium">{item.name}</TableCell>
                     <TableCell><Badge variant="outline">{item.unit}</Badge></TableCell>
-                    <TableCell className={item.current_stock < 10 ? 'text-destructive font-semibold' : ''}>{item.current_stock}</TableCell>
+                    <TableCell className={item.current_stock < LOW_STOCK_THRESHOLD ? 'text-destructive font-semibold' : ''}>{item.current_stock}</TableCell>
                     <TableCell>
                         <div className="flex gap-1">
                           <Tooltip><TooltipTrigger render={<Button variant="ghost" size="sm" onClick={() => openDialog('stockin', item)} />}>
@@ -131,7 +134,7 @@ export function InventoryPage() {
         </TabsContent>
 
         <TabsContent value="low">
-          {filtered.filter((i) => i.current_stock < 10).length === 0 ? (
+          {filtered.filter((i) => i.current_stock < LOW_STOCK_THRESHOLD).length === 0 ? (
             <EmptyState title="All stock levels are healthy" description="No items are running low" />
           ) : (
             <Table>
@@ -143,7 +146,7 @@ export function InventoryPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.filter((i) => i.current_stock < 10).map((item) => (
+                {filtered.filter((i) => i.current_stock < LOW_STOCK_THRESHOLD).map((item) => (
                   <TableRow key={item.id}>
                     <TableCell className="font-medium">{item.name}</TableCell>
                     <TableCell>{item.unit}</TableCell>
@@ -171,12 +174,12 @@ export function InventoryPage() {
               <>
                 <FormField label="Name" required><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required /></FormField>
                 <FormField label="Unit" required><Input value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder="pcs, ml, g, kg" required /></FormField>
-                <FormField label="Initial Stock"><Input type="number" value={form.current_stock} onChange={(e) => setForm({ ...form, current_stock: e.target.value })} /></FormField>
+                <FormField label="Initial Stock"><Input type="text" inputMode="numeric" pattern="[0-9]*" value={form.current_stock} onChange={(e) => setForm({ ...form, current_stock: e.target.value })} /></FormField>
               </>
             )}
             {dialogType !== 'create' && (
               <>
-                <FormField label="Quantity" required><Input type="number" step="0.01" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} required /></FormField>
+                <FormField label="Quantity" required><Input type="text" inputMode="decimal" pattern="[0-9]*\.?[0-9]*" step="0.01" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} required /></FormField>
                 {dialogType === 'stockin' && <FormField label="Reference (PO/UR)"><Input value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} /></FormField>}
                 <FormField label="Note"><Input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></FormField>
               </>

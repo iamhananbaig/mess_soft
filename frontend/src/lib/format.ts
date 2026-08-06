@@ -1,7 +1,7 @@
 import { format } from 'date-fns';
 
-export function formatPKR(amount: number): string {
-  return `Rs.${amount.toLocaleString('en-PK')}`;
+export function formatPKR(amount: number, { receipt = false } = {}): string {
+  return receipt ? `Rs. ${amount.toLocaleString('en-PK')}` : `Rs.${amount.toLocaleString('en-PK')}`;
 }
 
 function parseLocal(date: Date | string): Date {

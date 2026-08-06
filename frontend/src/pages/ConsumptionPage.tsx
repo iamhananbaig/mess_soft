@@ -13,8 +13,8 @@ import { FormField } from '@/components/FormField';
 import { TableSkeleton } from '@/components/TableSkeleton';
 import { EmptyState } from '@/components/EmptyState';
 import { Plus } from '@phosphor-icons/react';
+import type { InventoryItem } from '@/types/api';
 
-interface InventoryItem { id: number; name: string; unit: string; }
 interface Consumption { id: number; quantity: number; reason: string; created_at: string; inventory_item: InventoryItem; }
 
 export function ConsumptionPage() {
@@ -107,7 +107,7 @@ export function ConsumptionPage() {
               </Select>
             </FormField>
             <FormField label="Quantity" required>
-              <Input type="number" step="0.01" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} required />
+              <Input type="text" inputMode="decimal" pattern="[0-9]*\.?[0-9]*" step="0.01" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} required />
             </FormField>
             <FormField label="Reason" required>
               <Input value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} placeholder="Staff meal, Damaged, etc." required />
