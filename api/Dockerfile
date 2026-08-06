@@ -1,8 +1,8 @@
 FROM composer:2 AS build
 WORKDIR /app
-COPY composer.* ./
+COPY api/composer.json api/composer.lock ./
 RUN composer install --no-dev --optimize-autoloader --no-interaction --no-scripts
-COPY . .
+COPY api/ .
 
 FROM dunglas/frankenphp:1-php8.4
 WORKDIR /app

@@ -1,0 +1,17 @@
+node_modules
+frontend/node_modules
+vendor
+api/vendor
+api/.env
+dist
+.git
+*.log
+*.sqlite
+.env
+.env.local
+.env.docker.local
+.idea
+.vscode
+.DS_Store
+Thumbs.db
+*:Zone.Identifier
