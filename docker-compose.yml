@@ -3,6 +3,9 @@ name: mess-soft
 networks:
   internal:
     driver: bridge
+  npm_network:
+    name: npm_network
+    external: true
 
 services:
   nginx:
@@ -13,8 +16,7 @@ services:
         VITE_API_URL: ${VITE_API_URL:-/api/v1}
     networks:
       - internal
-    ports:
-      - "${APP_PORT:-9090}:80"
+      - npm_network
     depends_on:
       api:
         condition: service_healthy
