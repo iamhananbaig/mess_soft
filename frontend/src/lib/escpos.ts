@@ -80,6 +80,10 @@ function padLeft(str: string, width: number): string {
   return ' '.repeat(width - str.length) + str;
 }
 
+function commas(n: number): string {
+  return n.toLocaleString('en-US');
+}
+
 const W = 48; // 80mm thermal printer ~ 48 chars
 
 function line(char = '-'): string {
@@ -160,7 +164,7 @@ export function encodeReceipt(data: ReceiptData): Uint8Array {
   parts.push(
     text(
       padRight('TOTAL', W - 14) +
-        padLeft(`Rs.${data.total.toLocaleString('en-PK')}`, 14) +
+        padLeft(`Rs.${commas(data.total)}`, 14) +
         '\n'
     )
   );
@@ -172,8 +176,8 @@ export function encodeReceipt(data: ReceiptData): Uint8Array {
   if (isCash && data.amount_received !== null) {
     parts.push(
       text(
-        padRight(`Paid: Rs.${data.amount_received.toLocaleString('en-PK')}`, W / 2) +
-          padLeft(`Change: Rs.${(data.change ?? 0).toLocaleString('en-PK')}`, W / 2) +
+        padRight(`Paid: Rs.${commas(data.amount_received)}`, W / 2) +
+          padLeft(`Change: Rs.${commas(data.change ?? 0)}`, W / 2) +
           '\n'
       )
     );
