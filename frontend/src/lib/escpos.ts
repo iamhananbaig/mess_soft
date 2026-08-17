@@ -19,8 +19,8 @@ export interface EscPosProfile {
 }
 
 export const DEFAULT_ESC_POS_PROFILE: EscPosProfile = {
-  printWidthDots: 576, // 58mm paper — safe default for most POS printers
-  fontBColumns: 64,    // 384 / 9 (Font B dot width)
+  printWidthDots: 384, // 58mm paper — safe default for most POS printers
+  fontBColumns: 42,    // 384 / 9 (Font B dot width)
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────
