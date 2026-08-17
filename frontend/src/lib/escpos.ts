@@ -19,8 +19,8 @@ export interface EscPosProfile {
 }
 
 export const DEFAULT_ESC_POS_PROFILE: EscPosProfile = {
-  printWidthDots: 504, // 80mm paper minus margins
-  fontBColumns: 56,    // 504 / 9 (Font B dot width)
+  printWidthDots: 384, // 58mm paper — safe default for most POS printers
+  fontBColumns: 42,    // 384 / 9 (Font B dot width)
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -130,6 +130,7 @@ export function encodeReceipt(
   const parts: Uint8Array[] = [];
   const isCash = data.payment_method === 'Cash';
   const W = profile.fontBColumns;
+  const SAFE_W = W - 3; // leave 3 chars (~27 dots) of right margin
 
   parts.push(initialize());
   parts.push(selectFontB());
@@ -157,17 +158,18 @@ export function encodeReceipt(
 
   // Info
   parts.push(align('left'));
+  const halfInfo = Math.floor(SAFE_W / 2);
   parts.push(
     text(
-      padRight(`#${data.receipt_number}`, W / 2) +
-        padLeft(`${data.date}  ${data.time}`, W / 2) +
+      padRight(`#${data.receipt_number}`, halfInfo) +
+        padLeft(`${data.date}  ${data.time}`, halfInfo) +
         '\n'
     )
   );
   parts.push(
     text(
-      padRight(`Cashier: ${data.cashier}`, W / 2) +
-        padLeft(data.receipt_number ? 'ORIGINAL' : '', W / 2) +
+      padRight(`Cashier: ${data.cashier}`, halfInfo) +
+        padLeft(data.receipt_number ? 'ORIGINAL' : '', halfInfo) +
         '\n'
     )
   );
@@ -175,12 +177,16 @@ export function encodeReceipt(
   // Separator
   parts.push(text(line('-', W) + '\n'));
 
-  // Column header
+  // Column header — column widths fit within SAFE_W
+  const itemCol = 18;
+  const qtyCol = 11;
+  const amtCol = SAFE_W - itemCol - qtyCol; // 10
+
   parts.push(
     text(
-      padRight('Item', 24) +
-        padRight('Qty x Rate', 17) +
-        padLeft('= Amt', 15) +
+      padRight('Item', itemCol) +
+        padRight('Qty x Rate', qtyCol) +
+        padLeft('= Amt', amtCol) +
         '\n'
     )
   );
@@ -188,13 +194,13 @@ export function encodeReceipt(
 
   // Items
   for (const item of data.items) {
-    const name = item.name.length > 24 ? item.name.slice(0, 21) + '...' : item.name;
+    const name = item.name.length > itemCol ? item.name.slice(0, itemCol - 3) + '...' : item.name;
     const qtyRate = `${item.quantity} x ${item.rate}`;
     parts.push(
       text(
-        padRight(name, 24) +
-          padRight(qtyRate, 17) +
-          padLeft(String(item.amount), 15) +
+        padRight(name, itemCol) +
+          padRight(qtyRate, qtyCol) +
+          padLeft(String(item.amount), amtCol) +
           '\n'
       )
     );
@@ -207,10 +213,24 @@ export function encodeReceipt(
   parts.push(text(line('=', W) + '\n'));
   parts.push(align('left'));
   parts.push(bold(true));
+
+  const totalLabel = 'TOTAL';
+  const totalText = `Rs.${commas(data.total)}`;
+  const totalSpaces = Math.max(1, SAFE_W - totalLabel.length - totalText.length);
+
+  console.debug({
+    total: data.total,
+    totalText,
+    W,
+    SAFE_W,
+    renderedLength: totalLabel.length + totalSpaces + totalText.length,
+  });
+
   parts.push(
     text(
-      padRight('TOTAL', W - 16) +
-        padLeft(`Rs.${commas(data.total)}`, 16) +
+      totalLabel +
+        ' '.repeat(totalSpaces) +
+        totalText +
         '\n'
     )
   );
@@ -220,10 +240,11 @@ export function encodeReceipt(
   // Payment
   parts.push(text('\n'));
   if (isCash && data.amount_received !== null) {
+    const halfSafe = Math.floor(SAFE_W / 2);
     parts.push(
       text(
-        padRight(`Paid: Rs.${commas(data.amount_received)}`, W / 2) +
-          padLeft(`Change: Rs.${commas(data.change ?? 0)}`, W / 2) +
+        padRight(`Paid: Rs.${commas(data.amount_received)}`, halfSafe) +
+          padLeft(`Change: Rs.${commas(data.change ?? 0)}`, halfSafe) +
           '\n'
       )
     );
