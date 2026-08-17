@@ -5,7 +5,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { printer } from '@/services/printer';
 import { showToast } from '@/lib/toast';
 import { Printer, Bluetooth, Usb, Warning, CheckCircle } from '@phosphor-icons/react';
-import type { ReceiptData } from '@/components/Receipt';
+import type { ReceiptData } from '@/types/receipt';
 
 interface PrintDialogProps {
   data: ReceiptData | null;
@@ -77,7 +77,7 @@ export function PrintDialog({ data, open, onOpenChange }: PrintDialogProps) {
     if (!data) return;
     setPrinting(true);
     try {
-      const { printReceipt } = await import('@/components/Receipt');
+      const { printReceipt } = await import('@/lib/browserPrint');
       printReceipt(data);
       onOpenChange(false);
     } catch {

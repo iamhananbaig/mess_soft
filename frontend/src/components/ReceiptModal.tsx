@@ -1,4 +1,5 @@
-import { Receipt, type ReceiptData } from '@/components/Receipt';
+import { Receipt } from '@/components/Receipt';
+import type { ReceiptData } from '@/types/receipt';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Printer } from '@phosphor-icons/react';

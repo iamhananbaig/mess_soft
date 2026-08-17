@@ -18,7 +18,7 @@ import { formatPKR, formatDate, formatDateTime } from '@/lib/format';
 import { format } from 'date-fns';
 import { ArrowClockwise, TrendUp, Receipt, Package, Warning, List, StackSimple, ChartBar, Book, Printer } from '@phosphor-icons/react';
 import type { InventoryItem } from '@/types/api';
-import type { ReceiptData as FullReceiptData } from '@/components/Receipt';
+import type { ReceiptData as FullReceiptData } from '@/types/receipt';
 
 interface ReceiptItem {
   item: string;

@@ -32,6 +32,7 @@ interface BluetoothRemoteGATTCharacteristic {
 interface BluetoothRequestDeviceOptions {
   filters?: BluetoothLEScanFilter[];
   optionalServices?: string[];
+  acceptAllDevices?: boolean;
 }
 
 interface BluetoothLEScanFilter {

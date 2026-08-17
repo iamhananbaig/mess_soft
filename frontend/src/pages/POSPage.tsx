@@ -11,7 +11,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { PageSpinner } from '@/components/PageSpinner';
 import { EmptyState } from '@/components/EmptyState';
-import { type ReceiptData } from '@/components/Receipt';
+import type { ReceiptData } from '@/types/receipt';
 import { PrintDialog } from '@/components/PrintDialog';
 import { ShortcutsDialog } from '@/components/ShortcutsDialog';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';

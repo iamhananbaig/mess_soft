@@ -1,33 +1,10 @@
-import { renderToString } from 'react-dom/server';
 import { formatPKR } from '@/lib/format';
+import type { ReceiptData } from '@/types/receipt';
 
-export interface ReceiptData {
-  canteen_name: string;
-  branch_name: string;
-  date: string;
-  time: string;
-  receipt_number: string;
-  cashier: string;
-  items: {
-    name: string;
-    quantity: number;
-    rate: number;
-    amount: number;
-  }[];
-  total: number;
-  payment_method: string;
-  amount_received: number | null;
-  change: number | null;
-}
+export type { ReceiptData } from '@/types/receipt';
 
 const DOUBLE = '========================================';
 const SINGLE = '----------------------------------------';
-
-function esc(str: string | number): string {
-  const div = document.createElement('div');
-  div.textContent = String(str);
-  return div.innerHTML;
-}
 
 export function Receipt({ data, variant = 'original' }: { data: ReceiptData; variant?: 'original' | 'duplicate' }) {
   const isCash = data.payment_method === 'Cash';
@@ -110,32 +87,4 @@ export function Receipt({ data, variant = 'original' }: { data: ReceiptData; var
       </div>
     </div>
   );
-}
-
-// eslint-disable-next-line react/only-export-components
-export function printReceipt(data: ReceiptData, variant: 'original' | 'duplicate' = 'original') {
-  const printWindow = window.open('', '_blank');
-  if (!printWindow) return;
-
-  const html = renderToString(<Receipt data={data} variant={variant} />);
-
-  printWindow.document.write(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>Receipt #${esc(data.receipt_number)}</title>
-      <style>
-        @media print {
-          @page { size: 80mm auto; }
-        }
-        body { font-family: monospace; font-size: 11px; }
-      </style>
-    </head>
-    <body>
-      ${html}
-      <script>window.onload = function() { window.print(); window.close(); }</script>
-    </body>
-    </html>
-  `);
-  printWindow.document.close();
 }
