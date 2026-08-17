@@ -13,6 +13,7 @@ import { DatePicker } from '@/components/DatePicker';
 import { Badge } from '@/components/ui/badge';
 import { Spinner } from '@/components/ui/spinner';
 import { ReceiptModal } from '@/components/ReceiptModal';
+import { PrintDialog } from '@/components/PrintDialog';
 import { formatPKR, formatDate, formatDateTime } from '@/lib/format';
 import { format } from 'date-fns';
 import { ArrowClockwise, TrendUp, Receipt, Package, Warning, List, StackSimple, ChartBar, Book, Printer } from '@phosphor-icons/react';
@@ -87,6 +88,8 @@ export function ReportsPage() {
   const [printModalOpen, setPrintModalOpen] = useState(false);
   const [printReceiptData, setPrintReceiptData] = useState<FullReceiptData | null>(null);
   const [printingId, setPrintingId] = useState<number | null>(null);
+  const [printDialogOpen, setPrintDialogOpen] = useState(false);
+  const [printDialogData, setPrintDialogData] = useState<FullReceiptData | null>(null);
 
   const dateStr = format(date, 'yyyy-MM-dd');
   const fromStr = format(fromDate, 'yyyy-MM-dd');
@@ -148,6 +151,12 @@ export function ReportsPage() {
     } finally {
       setPrintingId(null);
     }
+  }, []);
+
+  const handleOpenPrintDialog = useCallback((data: FullReceiptData) => {
+    setPrintDialogData(data);
+    setPrintDialogOpen(true);
+    setPrintModalOpen(false);
   }, []);
 
   const flatReceiptItems = receipts.flatMap((r) =>
@@ -532,6 +541,12 @@ export function ReportsPage() {
         data={printReceiptData}
         open={printModalOpen}
         onOpenChange={setPrintModalOpen}
+        onPrint={handleOpenPrintDialog}
+      />
+      <PrintDialog
+        data={printDialogData}
+        open={printDialogOpen}
+        onOpenChange={setPrintDialogOpen}
       />
     </div>
   );

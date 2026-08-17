@@ -1,4 +1,4 @@
-import { Receipt, printReceipt, type ReceiptData } from '@/components/Receipt';
+import { Receipt, type ReceiptData } from '@/components/Receipt';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Printer } from '@phosphor-icons/react';
@@ -7,9 +7,10 @@ interface ReceiptModalProps {
   data: ReceiptData | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onPrint?: (data: ReceiptData) => void;
 }
 
-export function ReceiptModal({ data, open, onOpenChange }: ReceiptModalProps) {
+export function ReceiptModal({ data, open, onOpenChange, onPrint }: ReceiptModalProps) {
   if (!data) return null;
 
   return (
@@ -30,7 +31,7 @@ export function ReceiptModal({ data, open, onOpenChange }: ReceiptModalProps) {
           </Button>
           <Button
             className="bg-accent hover:bg-accent/90 text-accent-foreground"
-            onClick={() => printReceipt(data, 'duplicate')}
+            onClick={() => onPrint?.(data)}
           >
             <Printer className="size-4 mr-2" />
             Print

@@ -9,7 +9,8 @@ import { Spinner } from '@/components/ui/spinner';
 import { Separator } from '@/components/ui/separator';
 import { PageSpinner } from '@/components/PageSpinner';
 import { EmptyState } from '@/components/EmptyState';
-import { printReceipt, type ReceiptData } from '@/components/Receipt';
+import { type ReceiptData } from '@/components/Receipt';
+import { PrintDialog } from '@/components/PrintDialog';
 import { ShortcutsDialog } from '@/components/ShortcutsDialog';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { showToast } from '@/lib/toast';
@@ -32,6 +33,8 @@ export function POSPage() {
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [amountReceived, setAmountReceived] = useState('');
+  const [printDialogOpen, setPrintDialogOpen] = useState(false);
+  const [printReceiptData, setPrintReceiptData] = useState<ReceiptData | null>(null);
 
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -94,7 +97,8 @@ export function POSPage() {
         amount_received: received,
       });
       const receiptRes = await api.get(`/sales/${saleRes.data.id}/receipt`);
-      printReceipt(receiptRes.data as ReceiptData);
+      setPrintReceiptData(receiptRes.data as ReceiptData);
+      setPrintDialogOpen(true);
       showToast(`Sale #${saleRes.data.id} — ${formatPKR(saleRes.data.total_amount)}`, 'success');
       setCart([]);
       setAmountReceived('');
@@ -144,6 +148,11 @@ export function POSPage() {
   return (
     <div className="flex h-full">
       <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+      <PrintDialog
+        data={printReceiptData}
+        open={printDialogOpen}
+        onOpenChange={setPrintDialogOpen}
+      />
       {/* Menu Items Panel */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="p-4 border-b space-y-3">
