@@ -66,7 +66,7 @@ function padLeft(str: string, width: number): string {
 
 const LINE_WIDTH = 48; // 80mm thermal printer ~ 48 chars
 
-function line(char = '─'): string {
+function line(char = '-'): string {
   return char.repeat(LINE_WIDTH);
 }
 
@@ -87,7 +87,7 @@ export function encodeReceipt(data: ReceiptData): Uint8Array {
   parts.push(bold(false));
   parts.push(text(data.branch_name));
   parts.push(newline());
-  parts.push(text(line('═')));
+  parts.push(text(line('=')));
   parts.push(newline());
 
   // Info section
@@ -109,7 +109,7 @@ export function encodeReceipt(data: ReceiptData): Uint8Array {
   parts.push(text(`Cashier: ${data.cashier}\n`));
 
   // Separator
-  parts.push(text(line('─') + '\n'));
+  parts.push(text(line('-') + '\n'));
 
   // Column header
   parts.push(
@@ -137,10 +137,10 @@ export function encodeReceipt(data: ReceiptData): Uint8Array {
   }
 
   // Separator
-  parts.push(text(line('─') + '\n'));
+  parts.push(text(line('-') + '\n'));
 
   // Total
-  parts.push(text(line('═') + '\n'));
+  parts.push(text(line('=') + '\n'));
   parts.push(align('left'));
   parts.push(bold(true));
   parts.push(
@@ -151,7 +151,7 @@ export function encodeReceipt(data: ReceiptData): Uint8Array {
     )
   );
   parts.push(bold(false));
-  parts.push(text(line('═') + '\n'));
+  parts.push(text(line('=') + '\n'));
 
   // Payment info
   parts.push(text(`\nPayment: ${data.payment_method}\n`));
@@ -181,7 +181,7 @@ export function encodeReceipt(data: ReceiptData): Uint8Array {
   parts.push(text('Thank you for visiting IDC!\n'));
   parts.push(bold(false));
   parts.push(text('Computer-generated receipt\n'));
-  parts.push(text(line('═') + '\n'));
+  parts.push(text(line('=') + '\n'));
 
   // Cut
   parts.push(feedLines(3));
