@@ -25,6 +25,10 @@ export function initialize(): Uint8Array {
   return bytes(0x1b, 0x40); // ESC @
 }
 
+export function selectFontA(): Uint8Array {
+  return bytes(0x1b, 0x4d, 0x00); // ESC M 0 — Font A (12x24 dots)
+}
+
 export function setLeftMargin(dots: number): Uint8Array {
   const nL = dots & 0xff;
   const nH = (dots >> 8) & 0xff;
@@ -87,6 +91,7 @@ export function encodeReceipt(data: ReceiptData): Uint8Array {
   const isCash = data.payment_method === 'Cash';
 
   parts.push(initialize());
+  parts.push(selectFontA());
   parts.push(setLeftMargin(0));
   parts.push(setPrintWidth(576));
 
