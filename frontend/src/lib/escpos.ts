@@ -29,6 +29,10 @@ export function selectFontA(): Uint8Array {
   return bytes(0x1b, 0x4d, 0x00); // ESC M 0 — Font A (12x24 dots)
 }
 
+export function selectFontB(): Uint8Array {
+  return bytes(0x1b, 0x4d, 0x01); // ESC M 1 — Font B (9x14 dots)
+}
+
 export function setLeftMargin(dots: number): Uint8Array {
   const nL = dots & 0xff;
   const nH = (dots >> 8) & 0xff;
@@ -84,7 +88,7 @@ function commas(n: number): string {
   return n.toLocaleString('en-US');
 }
 
-const W = 48; // 80mm thermal printer ~ 48 chars
+const W = 56; // Font B @ 504 dots (9 dots/char)
 
 function line(char = '-'): string {
   return char.repeat(W);
@@ -95,8 +99,8 @@ export function encodeReceipt(data: ReceiptData): Uint8Array {
   const isCash = data.payment_method === 'Cash';
 
   parts.push(initialize());
-  parts.push(selectFontA());
-  parts.push(setPrintWidth(576));
+  parts.push(selectFontB());
+  parts.push(setPrintWidth(504));
 
   // Header
   parts.push(align('center'));
@@ -132,9 +136,9 @@ export function encodeReceipt(data: ReceiptData): Uint8Array {
   // Column header
   parts.push(
     text(
-      padRight('Item', 20) +
-        padRight('Qty x Rate', 15) +
-        padLeft('= Amt', 13) +
+      padRight('Item', 24) +
+        padRight('Qty x Rate', 17) +
+        padLeft('= Amt', 15) +
         '\n'
     )
   );
@@ -142,13 +146,13 @@ export function encodeReceipt(data: ReceiptData): Uint8Array {
 
   // Items
   for (const item of data.items) {
-    const name = item.name.length > 20 ? item.name.slice(0, 17) + '...' : item.name;
+    const name = item.name.length > 24 ? item.name.slice(0, 21) + '...' : item.name;
     const qtyRate = `${item.quantity} x ${item.rate}`;
     parts.push(
       text(
-        padRight(name, 20) +
-          padRight(qtyRate, 15) +
-          padLeft(String(item.amount), 13) +
+        padRight(name, 24) +
+          padRight(qtyRate, 17) +
+          padLeft(String(item.amount), 15) +
           '\n'
       )
     );
@@ -163,8 +167,8 @@ export function encodeReceipt(data: ReceiptData): Uint8Array {
   parts.push(bold(true));
   parts.push(
     text(
-      padRight('TOTAL', W - 14) +
-        padLeft(`Rs.${commas(data.total)}`, 14) +
+      padRight('TOTAL', W - 16) +
+        padLeft(`Rs.${commas(data.total)}`, 16) +
         '\n'
     )
   );
