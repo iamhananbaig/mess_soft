@@ -25,6 +25,18 @@ export function initialize(): Uint8Array {
   return bytes(0x1b, 0x40); // ESC @
 }
 
+export function setLeftMargin(dots: number): Uint8Array {
+  const nL = dots & 0xff;
+  const nH = (dots >> 8) & 0xff;
+  return bytes(0x1b, 0x6c, nL, nH); // ESC l nL nH
+}
+
+export function setPrintWidth(dots: number): Uint8Array {
+  const nL = dots & 0xff;
+  const nH = (dots >> 8) & 0xff;
+  return bytes(0x1d, 0x57, nL, nH); // GS W nL nH
+}
+
 export function align(mode: 'left' | 'center' | 'right'): Uint8Array {
   const n = mode === 'left' ? 0 : mode === 'center' ? 1 : 2;
   return bytes(0x1b, 0x61, n); // ESC a n
@@ -64,49 +76,47 @@ function padLeft(str: string, width: number): string {
   return ' '.repeat(width - str.length) + str;
 }
 
-const LINE_WIDTH = 48; // 80mm thermal printer ~ 48 chars
+const W = 48; // 80mm thermal printer ~ 48 chars
 
 function line(char = '-'): string {
-  return char.repeat(LINE_WIDTH);
+  return char.repeat(W);
 }
 
 export function encodeReceipt(data: ReceiptData): Uint8Array {
   const parts: Uint8Array[] = [];
   const isCash = data.payment_method === 'Cash';
-  const W = LINE_WIDTH;
 
   parts.push(initialize());
+  parts.push(setLeftMargin(0));
+  parts.push(setPrintWidth(576));
 
   // Header
   parts.push(align('center'));
   parts.push(bold(true));
   parts.push(doubleWidth(true));
-  parts.push(text(data.canteen_name));
+  parts.push(text(`*** ${data.canteen_name} ***`));
   parts.push(newline());
   parts.push(doubleWidth(false));
   parts.push(bold(false));
-  parts.push(text(data.branch_name));
-  parts.push(newline());
   parts.push(text(line('=')));
   parts.push(newline());
 
-  // Info section
+  // Info
   parts.push(align('left'));
   parts.push(
     text(
-      padRight(`Date: ${data.date}`, W / 2) +
-        padLeft(`Time: ${data.time}`, W / 2) +
+      padRight(`#${data.receipt_number}`, W / 2) +
+        padLeft(`${data.date}  ${data.time}`, W / 2) +
         '\n'
     )
   );
   parts.push(
     text(
-      padRight(`Receipt #: ${data.receipt_number}`, W / 2) +
+      padRight(`Cashier: ${data.cashier}`, W / 2) +
         padLeft(data.receipt_number ? 'ORIGINAL' : '', W / 2) +
         '\n'
     )
   );
-  parts.push(text(`Cashier: ${data.cashier}\n`));
 
   // Separator
   parts.push(text(line('-') + '\n'));
@@ -115,21 +125,21 @@ export function encodeReceipt(data: ReceiptData): Uint8Array {
   parts.push(
     text(
       padRight('Item', 20) +
-        padLeft('Qty', 5) +
-        padLeft('Rate', 10) +
-        padLeft('Amount', 13) +
+        padRight('Qty x Rate', 15) +
+        padLeft('= Amt', 13) +
         '\n'
     )
   );
+  parts.push(text(line('-') + '\n'));
 
   // Items
   for (const item of data.items) {
     const name = item.name.length > 20 ? item.name.slice(0, 17) + '...' : item.name;
+    const qtyRate = `${item.quantity} x ${item.rate}`;
     parts.push(
       text(
         padRight(name, 20) +
-          padLeft(String(item.quantity), 5) +
-          padLeft(String(item.rate), 10) +
+          padRight(qtyRate, 15) +
           padLeft(String(item.amount), 13) +
           '\n'
       )
@@ -153,34 +163,28 @@ export function encodeReceipt(data: ReceiptData): Uint8Array {
   parts.push(bold(false));
   parts.push(text(line('=') + '\n'));
 
-  // Payment info
-  parts.push(text(`\nPayment: ${data.payment_method}\n`));
+  // Payment
+  parts.push(text('\n'));
   if (isCash && data.amount_received !== null) {
     parts.push(
       text(
-        padRight('Received:', 34) +
-          padLeft(`Rs.${data.amount_received.toLocaleString('en-PK')}`, 14) +
+        padRight(`Paid: Rs.${data.amount_received.toLocaleString('en-PK')}`, W / 2) +
+          padLeft(`Change: Rs.${(data.change ?? 0).toLocaleString('en-PK')}`, W / 2) +
           '\n'
       )
     );
-    parts.push(
-      text(
-        padRight('Change:', 34) +
-          padLeft(`Rs.${(data.change ?? 0).toLocaleString('en-PK')}`, 14) +
-          '\n'
-      )
-    );
+  } else {
+    parts.push(text(`Payment: ${data.payment_method}\n`));
   }
 
   // Footer
-  parts.push(feedLines(2));
-  parts.push(align('center'));
-  parts.push(text(`Operator: ${data.cashier}\n`));
   parts.push(feedLines(1));
+  parts.push(text(line('-') + '\n'));
+  parts.push(feedLines(1));
+  parts.push(align('center'));
   parts.push(bold(true));
-  parts.push(text('Thank you for visiting IDC!\n'));
+  parts.push(text('Thank you for visiting!\n'));
   parts.push(bold(false));
-  parts.push(text('Computer-generated receipt\n'));
   parts.push(text(line('=') + '\n'));
 
   // Cut

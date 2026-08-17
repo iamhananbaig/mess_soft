@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Spinner } from '@/components/ui/spinner';
 import { Separator } from '@/components/ui/separator';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { PageSpinner } from '@/components/PageSpinner';
 import { EmptyState } from '@/components/EmptyState';
 import { type ReceiptData } from '@/components/Receipt';
@@ -18,7 +19,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { showToast } from '@/lib/toast';
 import { formatPKR } from '@/lib/format';
 import { FormField } from '@/components/FormField';
-import { ShoppingCart, Plus, Minus, X, Trash, MagnifyingGlass, CaretRight } from '@phosphor-icons/react';
+import { ShoppingCart, Plus, Minus, X, Trash, MagnifyingGlass } from '@phosphor-icons/react';
 import type { Category } from '@/types/api';
 
 interface MenuItem { id: number; name: string; price: number; category_id: number; is_available: boolean; }
@@ -38,6 +39,7 @@ export function POSPage() {
   const [printDialogOpen, setPrintDialogOpen] = useState(false);
   const [printReceiptData, setPrintReceiptData] = useState<ReceiptData | null>(null);
   const [cartOpen, setCartOpen] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   const isMobile = useIsMobile();
   const searchRef = useRef<HTMLInputElement>(null);
@@ -89,16 +91,11 @@ export function POSPage() {
 
   const handleCheckout = async () => {
     if (cart.length === 0) return;
-    const received = Number(amountReceived);
-    if (!received || received < total) {
-      showToast('Amount received must be at least the total', 'error');
-      return;
-    }
     setCheckoutLoading(true);
     try {
       const saleRes = await api.post('/sales', {
         items: cart.map((c) => ({ menu_item_id: c.menu_item_id, quantity: c.quantity })),
-        amount_received: received,
+        amount_received: Number(amountReceived),
       });
       const receiptRes = await api.get(`/sales/${saleRes.data.id}/receipt`);
       setPrintReceiptData(receiptRes.data as ReceiptData);
@@ -106,12 +103,23 @@ export function POSPage() {
       showToast(`Sale #${saleRes.data.id} — ${formatPKR(saleRes.data.total_amount)}`, 'success');
       setCart([]);
       setAmountReceived('');
+      setCartOpen(false);
     } catch (err: unknown) {
       const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Sale failed';
       showToast(message, 'error');
     } finally {
       setCheckoutLoading(false);
     }
+  };
+
+  const handleCheckoutClick = () => {
+    if (cart.length === 0) return;
+    const received = Number(amountReceived);
+    if (!received || received < total) {
+      showToast('Amount received must be at least the total', 'error');
+      return;
+    }
+    setConfirmOpen(true);
   };
 
   const handleSearchClear = useCallback(() => {
@@ -125,7 +133,7 @@ export function POSPage() {
   useKeyboardShortcuts({
     onSearchFocus: () => searchRef.current?.focus(),
     onSearchClear: handleSearchClear,
-    onCheckout: handleCheckout,
+    onCheckout: handleCheckoutClick,
     onClearCart: clearCart,
     onCategoryPrev: () => {
       if (categoryIndex > 0) {
@@ -178,18 +186,18 @@ export function POSPage() {
               <div key={item.menu_item_id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-sm truncate">{item.name}</div>
-                  <div className="text-xs text-muted-foreground">{formatPKR(item.price)}</div>
+                  <div className="text-xs text-muted-foreground">{formatPKR(item.price)} x {item.quantity}</div>
                 </div>
                 <div className="flex items-center gap-1">
-                  <Button variant="outline" size="sm" className="size-7 p-0" aria-label="Decrease quantity" onClick={() => updateQuantity(item.menu_item_id, -1)}>
-                    <Minus className="size-3" />
+                  <Button variant="outline" size="sm" className="size-9 p-0" aria-label="Decrease quantity" onClick={() => updateQuantity(item.menu_item_id, -1)}>
+                    <Minus className="size-4" />
                   </Button>
-                  <span className="w-7 text-center text-sm font-medium">{item.quantity}</span>
-                  <Button variant="outline" size="sm" className="size-7 p-0" aria-label="Increase quantity" onClick={() => updateQuantity(item.menu_item_id, 1)}>
-                    <Plus className="size-3" />
+                  <span className="w-8 text-center text-sm font-medium">{item.quantity}</span>
+                  <Button variant="outline" size="sm" className="size-9 p-0" aria-label="Increase quantity" onClick={() => updateQuantity(item.menu_item_id, 1)}>
+                    <Plus className="size-4" />
                   </Button>
-                  <Button variant="ghost" size="sm" className="size-7 p-0 text-destructive" aria-label="Remove item" onClick={() => removeFromCart(item.menu_item_id)}>
-                    <X className="size-3" />
+                  <Button variant="ghost" size="sm" className="size-9 p-0 text-destructive" aria-label="Remove item" onClick={() => removeFromCart(item.menu_item_id)}>
+                    <X className="size-4" />
                   </Button>
                 </div>
               </div>
@@ -230,7 +238,7 @@ export function POSPage() {
           className="w-full bg-accent hover:bg-accent/90 text-accent-foreground"
           size="lg"
           disabled={cart.length === 0 || checkoutLoading}
-          onClick={handleCheckout}
+          onClick={handleCheckoutClick}
         >
           {checkoutLoading ? <Spinner className="size-4 mr-2" /> : null}
           {checkoutLoading ? 'Processing...' : `Pay Cash — ${formatPKR(total)}`}
@@ -252,12 +260,36 @@ export function POSPage() {
         open={printDialogOpen}
         onOpenChange={setPrintDialogOpen}
       />
+
+      {/* Confirmation Dialog */}
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent className="sm:max-w-xs">
+          <DialogHeader>
+            <DialogTitle>Confirm Sale</DialogTitle>
+            <DialogDescription>
+              Process sale for <strong>{formatPKR(total)}</strong>?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancel</Button>
+            <Button
+              className="bg-accent hover:bg-accent/90 text-accent-foreground"
+              onClick={() => { setConfirmOpen(false); handleCheckout(); }}
+              disabled={checkoutLoading}
+            >
+              {checkoutLoading ? <Spinner className="size-4 mr-2" /> : null}
+              Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Menu Items Panel */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <div className="p-4 border-b space-y-3">
           <div className="relative max-w-sm">
             <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-            <Input ref={searchRef} placeholder="Search items... ( / )" value={posSearch} onChange={(e) => setPosSearch(e.target.value)} className="pl-9" />
+            <Input ref={searchRef} placeholder="Search items..." value={posSearch} onChange={(e) => setPosSearch(e.target.value)} className="pl-9" />
           </div>
           <Tabs value={selectedCategory} onValueChange={setSelectedCategory}>
             <TabsList className="flex-wrap h-auto gap-1">
@@ -274,25 +306,31 @@ export function POSPage() {
             <EmptyState title="No menu items found" description="Try selecting a different category" />
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-              {filteredItems.map((item) => (
-                <Card
-                  key={item.id}
-                  className={`transition-all ${item.is_available && !checkoutLoading ? 'cursor-pointer hover:shadow-md hover:border-accent/50 active:scale-[0.97]' : 'opacity-50 cursor-not-allowed'}`}
-                  role="button"
-                  tabIndex={item.is_available && !checkoutLoading ? 0 : -1}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (item.is_available && !checkoutLoading) addToCart(item); } }}
-                  onClick={() => item.is_available && !checkoutLoading && addToCart(item)}
-                  aria-label={`Add ${item.name} — ${formatPKR(item.price)}${!item.is_available ? ' (out of stock)' : ''}`}
-                >
-                  <CardContent className="p-4 text-center">
-                    <div className="font-medium text-sm mb-1">{item.name}</div>
-                    <div className="text-lg font-bold text-accent">{formatPKR(item.price)}</div>
-                    {!item.is_available && (
-                      <div className="text-xs text-destructive font-medium mt-1">Out of stock</div>
+              {filteredItems.map((item) => {
+                const cartQty = cart.find((c) => c.menu_item_id === item.id)?.quantity ?? 0;
+                return (
+                  <Card
+                    key={item.id}
+                    className={`relative transition-all ${item.is_available && !checkoutLoading ? 'cursor-pointer hover:shadow-md hover:border-accent/50 active:scale-[0.97]' : 'opacity-50 cursor-not-allowed'}`}
+                    role="button"
+                    tabIndex={item.is_available && !checkoutLoading ? 0 : -1}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (item.is_available && !checkoutLoading) addToCart(item); } }}
+                    onClick={() => item.is_available && !checkoutLoading && addToCart(item)}
+                    aria-label={`Add ${item.name} — ${formatPKR(item.price)}${!item.is_available ? ' (out of stock)' : ''}`}
+                  >
+                    {cartQty > 0 && (
+                      <Badge className="absolute top-2 right-2 size-6 p-0 text-[0.65rem] flex items-center justify-center">{cartQty}</Badge>
                     )}
-                  </CardContent>
-                </Card>
-              ))}
+                    <CardContent className="p-4 text-center">
+                      <div className="font-medium text-sm mb-1">{item.name}</div>
+                      <div className="text-lg font-bold text-accent">{formatPKR(item.price)}</div>
+                      {!item.is_available && (
+                        <div className="text-xs text-destructive font-medium mt-1">Out of stock</div>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
           )}
         </div>
@@ -305,35 +343,19 @@ export function POSPage() {
         </div>
       )}
 
-      {/* Mobile Bottom Bar */}
-      {isMobile && (
-        <div className="fixed bottom-0 inset-x-0 z-40 border-t bg-card shadow-lg">
-          <button
-            type="button"
-            className="w-full flex items-center justify-between p-4"
-            onClick={() => setCartOpen(true)}
-          >
-            <div className="flex items-center gap-3">
-              <div className="relative">
-                <ShoppingCart className="size-5 text-muted-foreground" />
-                {itemCount > 0 && (
-                  <Badge variant="secondary" className="absolute -top-2 -right-2 text-[0.6rem] size-5 p-0 flex items-center justify-center">
-                    {itemCount}
-                  </Badge>
-                )}
-              </div>
-              <span className="text-sm font-medium">
-                {cart.length === 0 ? 'Cart is empty' : `${itemCount} item${itemCount !== 1 ? 's' : ''}`}
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              {cart.length > 0 && (
-                <span className="font-bold text-accent">{formatPKR(total)}</span>
-              )}
-              <CaretRight className="size-4 text-muted-foreground" />
-            </div>
-          </button>
-        </div>
+      {/* Mobile FAB */}
+      {isMobile && cart.length > 0 && (
+        <button
+          type="button"
+          onClick={() => setCartOpen(true)}
+          className="fixed bottom-6 right-6 z-50 flex flex-col items-center justify-center size-16 rounded-full bg-accent text-accent-foreground shadow-lg active:scale-95 transition-transform"
+        >
+          <ShoppingCart className="size-5 mb-0.5" />
+          <span className="text-[0.6rem] font-bold leading-none">{formatPKR(total)}</span>
+          <Badge variant="secondary" className="absolute -top-1 -right-1 text-[0.6rem] size-5 p-0 flex items-center justify-center">
+            {itemCount}
+          </Badge>
+        </button>
       )}
 
       {/* Mobile Cart Sheet */}
@@ -349,9 +371,6 @@ export function POSPage() {
           </SheetContent>
         </Sheet>
       )}
-
-      {/* Mobile spacer to prevent content from going under bottom bar */}
-      {isMobile && <div className="h-16" />}
     </div>
   );
 }
