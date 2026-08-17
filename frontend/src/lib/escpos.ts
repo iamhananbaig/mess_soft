@@ -92,7 +92,6 @@ export function encodeReceipt(data: ReceiptData): Uint8Array {
 
   parts.push(initialize());
   parts.push(selectFontA());
-  parts.push(setLeftMargin(0));
   parts.push(setPrintWidth(576));
 
   // Header

@@ -126,10 +126,9 @@ export function printReceipt(data: ReceiptData, variant: 'original' | 'duplicate
       <title>Receipt #${esc(data.receipt_number)}</title>
       <style>
         @media print {
-          @page { margin: 0; size: 80mm auto; }
-          body { margin: 0; padding: 0; }
+          @page { size: 80mm auto; }
         }
-        body { font-family: monospace; font-size: 11px; margin: 0; }
+        body { font-family: monospace; font-size: 11px; }
       </style>
     </head>
     <body>
