@@ -7,16 +7,18 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Spinner } from '@/components/ui/spinner';
 import { Separator } from '@/components/ui/separator';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { PageSpinner } from '@/components/PageSpinner';
 import { EmptyState } from '@/components/EmptyState';
 import { type ReceiptData } from '@/components/Receipt';
 import { PrintDialog } from '@/components/PrintDialog';
 import { ShortcutsDialog } from '@/components/ShortcutsDialog';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { showToast } from '@/lib/toast';
 import { formatPKR } from '@/lib/format';
 import { FormField } from '@/components/FormField';
-import { ShoppingCart, Plus, Minus, X, Trash, MagnifyingGlass } from '@phosphor-icons/react';
+import { ShoppingCart, Plus, Minus, X, Trash, MagnifyingGlass, CaretRight } from '@phosphor-icons/react';
 import type { Category } from '@/types/api';
 
 interface MenuItem { id: number; name: string; price: number; category_id: number; is_available: boolean; }
@@ -35,7 +37,9 @@ export function POSPage() {
   const [amountReceived, setAmountReceived] = useState('');
   const [printDialogOpen, setPrintDialogOpen] = useState(false);
   const [printReceiptData, setPrintReceiptData] = useState<ReceiptData | null>(null);
+  const [cartOpen, setCartOpen] = useState(false);
 
+  const isMobile = useIsMobile();
   const searchRef = useRef<HTMLInputElement>(null);
 
   const categoryIds = ['all', ...categories.map((c) => String(c.id))];
@@ -145,6 +149,101 @@ export function POSPage() {
     </div>
   );
 
+  const cartContent = (
+    <>
+      <div className="p-4 border-b flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <ShoppingCart className="size-4 text-muted-foreground" />
+          <h2 className="font-semibold">Order</h2>
+          {itemCount > 0 && <Badge variant="secondary" className="text-xs">{itemCount}</Badge>}
+        </div>
+        {cart.length > 0 && (
+          <Button variant="ghost" size="sm" className="text-destructive h-8" onClick={clearCart}>
+            <Trash className="size-3.5 mr-1" />
+            Clear
+          </Button>
+        )}
+      </div>
+
+      <div className="flex-1 overflow-auto p-4">
+        {cart.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+            <ShoppingCart className="size-10 mb-3 opacity-30" />
+            <p className="text-sm font-medium">Cart is empty</p>
+            <p className="text-xs mt-1 opacity-60">Tap an item to add it</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {cart.map((item) => (
+              <div key={item.menu_item_id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-sm truncate">{item.name}</div>
+                  <div className="text-xs text-muted-foreground">{formatPKR(item.price)}</div>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button variant="outline" size="sm" className="size-7 p-0" aria-label="Decrease quantity" onClick={() => updateQuantity(item.menu_item_id, -1)}>
+                    <Minus className="size-3" />
+                  </Button>
+                  <span className="w-7 text-center text-sm font-medium">{item.quantity}</span>
+                  <Button variant="outline" size="sm" className="size-7 p-0" aria-label="Increase quantity" onClick={() => updateQuantity(item.menu_item_id, 1)}>
+                    <Plus className="size-3" />
+                  </Button>
+                  <Button variant="ghost" size="sm" className="size-7 p-0 text-destructive" aria-label="Remove item" onClick={() => removeFromCart(item.menu_item_id)}>
+                    <X className="size-3" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="p-4 border-t">
+        <div className="flex justify-between text-sm text-muted-foreground mb-1">
+          <span>Subtotal ({itemCount} items)</span>
+          <span>{formatPKR(total)}</span>
+        </div>
+        <Separator className="my-2" />
+        <div className="flex justify-between text-lg font-bold mb-3">
+          <span>Total</span>
+          <span>{formatPKR(total)}</span>
+        </div>
+        <div className="space-y-2 mb-4">
+          <FormField label="Amount Received (PKR)" required>
+            <Input
+              type="text"
+              inputMode="decimal"
+              min={total}
+              placeholder={String(total)}
+              value={amountReceived}
+              onChange={(e) => setAmountReceived(e.target.value)}
+            />
+          </FormField>
+          {Number(amountReceived) >= total && (
+            <div className="flex justify-between text-sm font-medium text-green-600">
+              <span>Change</span>
+              <span>{formatPKR(Number(amountReceived) - total)}</span>
+            </div>
+          )}
+        </div>
+        <Button
+          className="w-full bg-accent hover:bg-accent/90 text-accent-foreground"
+          size="lg"
+          disabled={cart.length === 0 || checkoutLoading}
+          onClick={handleCheckout}
+        >
+          {checkoutLoading ? <Spinner className="size-4 mr-2" /> : null}
+          {checkoutLoading ? 'Processing...' : `Pay Cash — ${formatPKR(total)}`}
+        </Button>
+        {!isMobile && (
+          <p className="text-center text-xs text-muted-foreground mt-3">
+            Press <kbd className="px-1 py-0.5 rounded bg-muted text-[0.625rem] font-medium">?</kbd> for keyboard shortcuts
+          </p>
+        )}
+      </div>
+    </>
+  );
+
   return (
     <div className="flex h-full">
       <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
@@ -199,97 +298,60 @@ export function POSPage() {
         </div>
       </div>
 
-      {/* Cart Panel */}
-      <div className="w-80 lg:w-96 border-l flex flex-col bg-card">
-        <div className="p-4 border-b flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <ShoppingCart className="size-4 text-muted-foreground" />
-            <h2 className="font-semibold">Order</h2>
-            {itemCount > 0 && <Badge variant="secondary" className="text-xs">{itemCount}</Badge>}
-          </div>
-          {cart.length > 0 && (
-            <Button variant="ghost" size="sm" className="text-destructive h-8" onClick={clearCart}>
-              <Trash className="size-3.5 mr-1" />
-              Clear
-            </Button>
-          )}
+      {/* Desktop Cart Sidebar */}
+      {!isMobile && (
+        <div className="w-80 lg:w-96 border-l flex flex-col bg-card">
+          {cartContent}
         </div>
+      )}
 
-        <div className="flex-1 overflow-auto p-4">
-          {cart.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-              <ShoppingCart className="size-10 mb-3 opacity-30" />
-              <p className="text-sm font-medium">Cart is empty</p>
-              <p className="text-xs mt-1 opacity-60">Tap an item to add it</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {cart.map((item) => (
-                <div key={item.menu_item_id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-sm truncate">{item.name}</div>
-                    <div className="text-xs text-muted-foreground">{formatPKR(item.price)}</div>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Button variant="outline" size="sm" className="size-7 p-0" aria-label="Decrease quantity" onClick={() => updateQuantity(item.menu_item_id, -1)}>
-                      <Minus className="size-3" />
-                    </Button>
-                    <span className="w-7 text-center text-sm font-medium">{item.quantity}</span>
-                    <Button variant="outline" size="sm" className="size-7 p-0" aria-label="Increase quantity" onClick={() => updateQuantity(item.menu_item_id, 1)}>
-                      <Plus className="size-3" />
-                    </Button>
-                    <Button variant="ghost" size="sm" className="size-7 p-0 text-destructive" aria-label="Remove item" onClick={() => removeFromCart(item.menu_item_id)}>
-                      <X className="size-3" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="p-4 border-t">
-          <div className="flex justify-between text-sm text-muted-foreground mb-1">
-            <span>Subtotal ({itemCount} items)</span>
-            <span>{formatPKR(total)}</span>
-          </div>
-          <Separator className="my-2" />
-          <div className="flex justify-between text-lg font-bold mb-3">
-            <span>Total</span>
-            <span>{formatPKR(total)}</span>
-          </div>
-          <div className="space-y-2 mb-4">
-            <FormField label="Amount Received (PKR)" required>
-              <Input
-                type="text"
-                inputMode="decimal"
-                min={total}
-                placeholder={String(total)}
-                value={amountReceived}
-                onChange={(e) => setAmountReceived(e.target.value)}
-              />
-            </FormField>
-            {Number(amountReceived) >= total && (
-              <div className="flex justify-between text-sm font-medium text-green-600">
-                <span>Change</span>
-                <span>{formatPKR(Number(amountReceived) - total)}</span>
-              </div>
-            )}
-          </div>
-          <Button
-            className="w-full bg-accent hover:bg-accent/90 text-accent-foreground"
-            size="lg"
-            disabled={cart.length === 0 || checkoutLoading}
-            onClick={handleCheckout}
+      {/* Mobile Bottom Bar */}
+      {isMobile && (
+        <div className="fixed bottom-0 inset-x-0 z-40 border-t bg-card shadow-lg">
+          <button
+            type="button"
+            className="w-full flex items-center justify-between p-4"
+            onClick={() => setCartOpen(true)}
           >
-            {checkoutLoading ? <Spinner className="size-4 mr-2" /> : null}
-            {checkoutLoading ? 'Processing...' : `Pay Cash — ${formatPKR(total)}`}
-          </Button>
-          <p className="text-center text-xs text-muted-foreground mt-3">
-            Press <kbd className="px-1 py-0.5 rounded bg-muted text-[0.625rem] font-medium">?</kbd> for keyboard shortcuts
-          </p>
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <ShoppingCart className="size-5 text-muted-foreground" />
+                {itemCount > 0 && (
+                  <Badge variant="secondary" className="absolute -top-2 -right-2 text-[0.6rem] size-5 p-0 flex items-center justify-center">
+                    {itemCount}
+                  </Badge>
+                )}
+              </div>
+              <span className="text-sm font-medium">
+                {cart.length === 0 ? 'Cart is empty' : `${itemCount} item${itemCount !== 1 ? 's' : ''}`}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              {cart.length > 0 && (
+                <span className="font-bold text-accent">{formatPKR(total)}</span>
+              )}
+              <CaretRight className="size-4 text-muted-foreground" />
+            </div>
+          </button>
         </div>
-      </div>
+      )}
+
+      {/* Mobile Cart Sheet */}
+      {isMobile && (
+        <Sheet open={cartOpen} onOpenChange={setCartOpen}>
+          <SheetContent side="bottom" className="h-[90vh] p-0" showCloseButton={false}>
+            <SheetHeader className="p-4 border-b">
+              <SheetTitle>Your Order</SheetTitle>
+            </SheetHeader>
+            <div className="flex-1 flex flex-col overflow-hidden h-[calc(90vh-60px)]">
+              {cartContent}
+            </div>
+          </SheetContent>
+        </Sheet>
+      )}
+
+      {/* Mobile spacer to prevent content from going under bottom bar */}
+      {isMobile && <div className="h-16" />}
     </div>
   );
 }

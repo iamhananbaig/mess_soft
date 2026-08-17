@@ -234,7 +234,7 @@ export function MenuPage() {
 
   return (
     <TooltipProvider>
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-6 p-4 sm:p-6">
       <PageHeader
         title="Menu Management"
         description="Manage menu items, categories, pricing, and recipes"

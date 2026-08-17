@@ -113,14 +113,14 @@ export function PermissionsPage() {
   }, [isDirty]);
 
   if (loading) return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-6 p-4 sm:p-6">
       <PageHeader title="Role Permissions" description="Manage what each role can access" />
       <TableSkeleton columns={4} />
     </div>
   );
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-6 p-4 sm:p-6">
       <PageHeader
         title="Role Permissions"
         description="Manage what each role can access"

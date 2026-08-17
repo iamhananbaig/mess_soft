@@ -170,7 +170,7 @@ export function ReportsPage() {
   );
 
   const dateControls = (
-    <div className="flex items-center gap-3">
+    <div className="flex flex-wrap items-center gap-3">
       <DatePicker value={fromDate} onChange={setFromDate} />
       <span className="text-muted-foreground text-sm">to</span>
       <DatePicker value={toDate} onChange={setToDate} />
@@ -181,12 +181,12 @@ export function ReportsPage() {
   );
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-6 p-4 sm:p-6">
       <PageHeader title="Reports" description="View sales, inventory, and waste analytics" />
 
       <Tabs value={tab} onValueChange={setTab}>
-        <div className="flex items-center justify-between gap-4">
-          <TabsList>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <TabsList className="flex-wrap sm:flex-nowrap overflow-x-auto">
             <TabsTrigger value="daily">
               <TrendUp className="size-4 mr-1.5" /> Daily
             </TabsTrigger>
@@ -208,7 +208,7 @@ export function ReportsPage() {
           </TabsList>
 
           {tab === 'daily' && (
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <DatePicker value={date} onChange={setDate} />
               <Button variant="outline" size="sm" onClick={load} disabled={loading}>
                 <ArrowClockwise className={`size-4 ${loading ? 'animate-spin' : ''}`} />

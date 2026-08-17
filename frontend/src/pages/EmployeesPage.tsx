@@ -77,7 +77,7 @@ export function EmployeesPage() {
 
   return (
     <TooltipProvider>
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-6 p-4 sm:p-6">
       <PageHeader title="Employee Management" description="Manage staff accounts and roles" />
       <SearchInput value={search} onChange={setSearch} placeholder="Search employees..." />
       {loading ? <TableSkeleton columns={5} /> : filtered.length === 0 ? (
