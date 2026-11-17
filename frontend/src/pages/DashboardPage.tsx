@@ -100,9 +100,12 @@ export function DashboardPage() {
 
   useEffect(() => {
     load();
-    // Keep it fresh on a counter screen; cheap single request.
-    const t = setInterval(load, 60_000);
-    return () => clearInterval(t);
+    // Keep it fresh on a counter screen, but only while it is visible: no
+    // background requests and chart redraws when the tab is hidden or the screen is off.
+    const t = setInterval(() => { if (document.visibilityState === 'visible') load(); }, 60_000);
+    const onVisible = () => { if (document.visibilityState === 'visible') load(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', onVisible); };
   }, [load]);
 
   if (!data) return loading ? <PageSpinner /> : null;

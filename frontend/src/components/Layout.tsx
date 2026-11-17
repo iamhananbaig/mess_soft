@@ -73,7 +73,7 @@ export function Layout() {
       {/* Fixed to the viewport so the header stays put and the content area below
           is the one scroll container — lets pages (POS) pin panels like the cart. */}
       <SidebarInset className="h-dvh overflow-hidden">
-        <header className="sticky top-0 z-30 flex h-12 md:h-16 shrink-0 items-center gap-2 border-b md:border-b-0 bg-background/95 backdrop-blur transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:md:h-12">
+        <header className="sticky top-0 z-30 flex h-12 md:h-16 shrink-0 items-center gap-2 border-b md:border-b-0 bg-background transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:md:h-12">
           <div className="flex items-center gap-2 px-3 md:px-4">
             <SidebarTrigger size="icon-lg" className="-ml-1" />
             <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />

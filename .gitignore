@@ -31,3 +31,6 @@ Thumbs.db
 
 # Build
 *.log
+
+# Local-only compose tweaks (e.g. publishing a port)
+docker-compose.override.yml
