@@ -300,7 +300,7 @@ export function POSPage() {
       </Dialog>
 
       {/* Menu */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
         <div className="sticky top-0 z-20 bg-background/95 backdrop-blur border-b px-3 py-2 md:p-4 space-y-2">
           <div className="relative md:max-w-sm">
             <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
@@ -368,7 +368,7 @@ export function POSPage() {
 
       {/* Desktop cart */}
       {!isMobile && (
-        <aside className="w-80 lg:w-96 border-l flex flex-col bg-card">
+        <aside className="w-80 lg:w-96 border-l flex flex-col min-h-0 bg-card">
           <div className="p-4 border-b flex items-center justify-between">
             <div className="flex items-center gap-2">
               <ShoppingCart className="size-4 text-muted-foreground" />

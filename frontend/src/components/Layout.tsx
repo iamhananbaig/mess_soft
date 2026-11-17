@@ -70,7 +70,9 @@ export function Layout() {
         </SidebarFooter>
         <SidebarRail />
       </Sidebar>
-      <SidebarInset>
+      {/* Fixed to the viewport so the header stays put and the content area below
+          is the one scroll container — lets pages (POS) pin panels like the cart. */}
+      <SidebarInset className="h-dvh overflow-hidden">
         <header className="sticky top-0 z-30 flex h-12 md:h-16 shrink-0 items-center gap-2 border-b md:border-b-0 bg-background/95 backdrop-blur transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:md:h-12">
           <div className="flex items-center gap-2 px-3 md:px-4">
             <SidebarTrigger size="icon-lg" className="-ml-1" />
@@ -96,7 +98,7 @@ export function Layout() {
           </div>
         </header>
         {/* Bottom padding on phones keeps content clear of the tab bar */}
-        <div className="flex-1 overflow-auto pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">
+        <div className="flex-1 min-h-0 overflow-auto pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">
           <Outlet />
         </div>
         <MobileTabBar />
