@@ -19,6 +19,7 @@ class ReceiptSettingsTest extends TestCase
         'show_payment' => true,
         'paper_width' => '80',
         'tear_feed_lines' => 5,
+        'print_width_mm' => 68,
     ];
 
     public function test_defaults_match_previous_receipt(): void
@@ -30,6 +31,7 @@ class ReceiptSettingsTest extends TestCase
                 'footer_text' => 'Thank you for visiting!',
                 'paper_width' => '80',
                 'text_size' => 'large',
+                'print_width_mm' => 64,
                 'show_cashier' => true,
             ]);
     }
@@ -37,7 +39,7 @@ class ReceiptSettingsTest extends TestCase
     public function test_admin_can_update_and_receipt_uses_it(): void
     {
         $this->withHeaders($this->authHeaders())->putJson('/api/v1/settings/receipt', $this->valid)
-            ->assertOk()->assertJson(['canteen_name' => 'TEST CANTEEN', 'paper_width' => '80']);
+            ->assertOk()->assertJson(['canteen_name' => 'TEST CANTEEN', 'paper_width' => '80', 'print_width_mm' => 68]);
 
         $cat = Category::create(['name' => 'Drinks']);
         $item = MenuItem::create(['category_id' => $cat->id, 'name' => 'Tea', 'price' => 50]);
@@ -63,7 +65,7 @@ class ReceiptSettingsTest extends TestCase
     public function test_validation(): void
     {
         $this->withHeaders($this->authHeaders())
-            ->putJson('/api/v1/settings/receipt', ['header_lines' => "1\n2\n3\n4", 'paper_width' => '70'] + $this->valid)
-            ->assertUnprocessable()->assertJsonValidationErrors(['header_lines', 'paper_width']);
+            ->putJson('/api/v1/settings/receipt', ['header_lines' => "1\n2\n3\n4", 'paper_width' => '70', 'print_width_mm' => 80] + $this->valid)
+            ->assertUnprocessable()->assertJsonValidationErrors(['header_lines', 'paper_width', 'print_width_mm']);
     }
 }

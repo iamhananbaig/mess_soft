@@ -56,6 +56,7 @@ class SettingController extends Controller
             'show_payment' => 'required|boolean',
             'paper_width' => 'required|in:58,80',
             'text_size' => 'sometimes|in:large,compact',
+            'print_width_mm' => 'sometimes|integer|in:64,66,68,70,72',
             'tear_feed_lines' => 'required|integer|min:0|max:12',
         ]);
 

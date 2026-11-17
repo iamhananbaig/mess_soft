@@ -3,7 +3,7 @@ import api from '@/services/api';
 import { printer } from '@/services/printer';
 import { useAuth } from '@/contexts/AuthContext';
 import { showToast, showErrorToast } from '@/lib/toast';
-import { encodeReceiptCopies, type ReceiptSettings } from '@/lib/escpos';
+import { encodeReceiptCopies, PRINT_WIDTHS_80MM, profileForPaper, type ReceiptSettings } from '@/lib/escpos';
 import { fetchReceiptSettings, setReceiptSettingsCache } from '@/hooks/useReceiptSettings';
 import type { ReceiptCopy, ReceiptData } from '@/types/receipt';
 import { Button } from '@/components/ui/button';
@@ -177,16 +177,30 @@ export function ReceiptDesignPage() {
                 </div>
               </FormField>
               {form.paper_width === '80' && (
-                <FormField label="Text size">
-                  <div className="flex gap-1">
-                    {([['large', 'Large (42 per line)'], ['compact', 'Compact (56 per line)']] as const).map(([v, l]) => (
-                      <Button key={v} type="button" size="sm" variant={(form.text_size ?? 'large') === v ? 'default' : 'outline'} onClick={() => set('text_size', v)}>
-                        {l}
-                      </Button>
-                    ))}
-                  </div>
-                  <p className="text-xs text-muted-foreground">Large is easier to read; compact fits longer item names.</p>
-                </FormField>
+                <>
+                  <FormField label="Text size">
+                    <div className="flex gap-1">
+                      {([['large', 'Large'], ['compact', 'Compact']] as const).map(([v, l]) => (
+                        <Button key={v} type="button" size="sm" variant={(form.text_size ?? 'large') === v ? 'default' : 'outline'} onClick={() => set('text_size', v)}>
+                          {l} ({profileForPaper('80', v, form.print_width_mm).columns} per line)
+                        </Button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground">Large is easier to read; compact fits longer item names.</p>
+                  </FormField>
+                  <FormField label="Print area width">
+                    <div className="flex flex-wrap gap-1">
+                      {PRINT_WIDTHS_80MM.map((mm) => (
+                        <Button key={mm} type="button" size="sm" variant={(form.print_width_mm ?? 64) === mm ? 'default' : 'outline'} onClick={() => set('print_width_mm', mm)}>
+                          {mm} mm
+                        </Button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Gap on the right? Widen one step and test print. If the printer gets stuck, restart it, go back one step, then Save.
+                    </p>
+                  </FormField>
+                </>
               )}
               <FormField label="Blank lines after the tear line (no-cutter printers)">
                 <Input

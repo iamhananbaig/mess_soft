@@ -85,5 +85,5 @@ export function interpretEscPos(data: Uint8Array): SlipPreviewModel {
   }
   if (runs.length || pending.length) endLine();
 
-  return { columns: Math.floor(widthDots / FONT_DOT_WIDTH[font]), font, lines };
+  return { columns: Math.floor((widthDots - 1) / FONT_DOT_WIDTH[font]), font, lines };
 }

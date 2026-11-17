@@ -49,8 +49,11 @@ class Setting extends Model
             'show_payment' => true,
             // The canteen's Speed-X BT600M is an 80mm printer.
             'paper_width' => '80',
-            // 'large' = Font A (48 chars on 80mm), easier to read; 'compact' = Font B (64 chars).
+            // 'large' = Font A, easier to read; 'compact' = Font B, fits more per line.
             'text_size' => 'large',
+            // 80mm printable width in mm (8 dots/mm). 64 is safe on every head; the
+            // BT600M crashed at 72, so it is tuned up from here with test prints.
+            'print_width_mm' => 64,
             'tear_feed_lines' => 4,
         ];
 

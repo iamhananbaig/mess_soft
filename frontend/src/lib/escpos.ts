@@ -35,8 +35,16 @@ export const DEFAULT_ESC_POS_PROFILE: EscPosProfile = {
  */
 const TEAR_FEED_LINES = 4;
 
-/** Printable width used for 80mm paper — safe on both 512- and 576-dot heads. */
-const PRINT_WIDTH_80MM_DOTS = 512;
+/** Printable widths (mm) offered for 80mm paper; 8 dots per mm. */
+export const PRINT_WIDTHS_80MM = [64, 66, 68, 70, 72] as const;
+
+/**
+ * Characters that fit in a print area, always leaving at least one dot spare:
+ * a line that exactly fills the head is where this printer's firmware got stuck.
+ */
+export function columnsFor(widthDots: number, font: 'A' | 'B'): number {
+  return Math.floor((widthDots - 1) / (font === 'A' ? 12 : 9));
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -177,8 +185,10 @@ export interface ReceiptSettings {
   show_cashier: boolean;
   show_payment: boolean;
   paper_width: '58' | '80';
-  /** 80mm only: 'large' = Font A, 42 chars (easier to read); 'compact' = Font B, 56 chars. */
+  /** 80mm only: 'large' = Font A (easier to read); 'compact' = Font B (more per line). */
   text_size: 'large' | 'compact';
+  /** 80mm only: printable width in mm. 64 fits every head; widen with test prints. */
+  print_width_mm: (typeof PRINT_WIDTHS_80MM)[number];
   tear_feed_lines: number;
 }
 
@@ -193,20 +203,22 @@ export const DEFAULT_RECEIPT_SETTINGS: ReceiptSettings = {
   show_payment: true,
   paper_width: '80',
   text_size: 'large',
+  print_width_mm: 64,
   tear_feed_lines: TEAR_FEED_LINES,
 };
 
 export function profileForPaper(
   width: ReceiptSettings['paper_width'],
   textSize: ReceiptSettings['text_size'] = 'large',
+  printWidthMm: number = DEFAULT_RECEIPT_SETTINGS.print_width_mm,
 ): EscPosProfile {
   if (width === '80') {
-    // 80mm printers come with a 576- or 512-dot head (the BT600M family ships both).
-    // A line wider than the head crashes some firmware after the first line, so use
-    // 512 dots: it fits either head (a 576-dot head just gets a wider right margin).
-    return textSize === 'compact'
-      ? { printWidthDots: PRINT_WIDTH_80MM_DOTS, columns: 56, font: 'B' } // 512 / 9
-      : { printWidthDots: PRINT_WIDTH_80MM_DOTS, columns: 42, font: 'A' }; // 512 / 12
+    // 80mm heads are 512–576 dots wide and this printer's firmware crashes on a
+    // line wider than its head, so the width is a setting (default 64mm = 512 dots).
+    const mm = (PRINT_WIDTHS_80MM as readonly number[]).includes(printWidthMm) ? printWidthMm : 64;
+    const dots = mm * 8;
+    const font = textSize === 'compact' ? 'B' : 'A';
+    return { printWidthDots: dots, columns: columnsFor(dots, font), font };
   }
   // 58mm stays on Font B: Font A gives only 32 columns, too narrow for the item table.
   return DEFAULT_ESC_POS_PROFILE;
@@ -244,7 +256,7 @@ export function encodeReceiptCopies(
 export function encodeReceipt(data: ReceiptData, options: EncodeReceiptOptions): Uint8Array {
   const { copy, reprint = false, autoCut = false } = options;
   const settings: ReceiptSettings = { ...DEFAULT_RECEIPT_SETTINGS, ...options.settings };
-  const profile = profileForPaper(settings.paper_width, settings.text_size);
+  const profile = profileForPaper(settings.paper_width, settings.text_size, settings.print_width_mm);
   const canteenName = settings.canteen_name || data.canteen_name;
 
   const parts: Uint8Array[] = [];
@@ -398,7 +410,7 @@ export function encodeCashClosing(
   options: { autoCut?: boolean; settings?: Partial<ReceiptSettings> } = {},
 ): Uint8Array {
   const settings: ReceiptSettings = { ...DEFAULT_RECEIPT_SETTINGS, ...options.settings };
-  const profile = profileForPaper(settings.paper_width, settings.text_size);
+  const profile = profileForPaper(settings.paper_width, settings.text_size, settings.print_width_mm);
   const W = profile.columns;
   const SAFE_W = W - 3;
   const parts: Uint8Array[] = [];
