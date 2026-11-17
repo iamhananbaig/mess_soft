@@ -1,5 +1,6 @@
 import { Outlet, useNavigate, useLocation } from 'react-router';
 import { useAuth } from '@/contexts/AuthContext';
+import { PrinterButton } from '@/components/PrinterButton';
 import {
   SidebarProvider,
   Sidebar,
@@ -89,6 +90,9 @@ export function Layout() {
                 </BreadcrumbItem>
               </BreadcrumbList>
             </Breadcrumb>
+          </div>
+          <div className="ml-auto px-2 md:px-4">
+            <PrinterButton />
           </div>
         </header>
         {/* Bottom padding on phones keeps content clear of the tab bar */}

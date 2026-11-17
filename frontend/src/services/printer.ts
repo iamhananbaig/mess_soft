@@ -160,6 +160,11 @@ class PrinterService {
     return false;
   }
 
+  /** A reconnect to the saved printer is in progress. */
+  get isConnecting(): boolean {
+    return this.reconnecting !== null;
+  }
+
   get isWebBluetoothAvailable(): boolean {
     return typeof navigator !== 'undefined' && !!navigator.bluetooth;
   }
@@ -341,6 +346,7 @@ class PrinterService {
       }
       return false;
     })();
+    this.notify();
 
     try {
       return await this.reconnecting;

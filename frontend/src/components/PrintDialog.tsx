@@ -5,9 +5,11 @@ import { SlipPreview } from '@/components/SlipPreview';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
+import { PrinterConnectPanel } from '@/components/PrinterConnectPanel';
+import { usePrinterStatus } from '@/hooks/usePrinterStatus';
 import { printer } from '@/services/printer';
 import { showToast } from '@/lib/toast';
-import { Printer, Bluetooth, Usb, Warning, CheckCircle, ArrowsClockwise } from '@phosphor-icons/react';
+import { Printer } from '@phosphor-icons/react';
 import type { ReceiptCopy, ReceiptData } from '@/types/receipt';
 
 type CopyChoice = 'both' | ReceiptCopy;
@@ -27,85 +29,26 @@ interface PrintDialogProps {
 }
 
 export function PrintDialog({ data, open, onOpenChange, reprint = false }: PrintDialogProps) {
-  const [connected, setConnected] = useState(printer.isConnected);
-  const [printerName, setPrinterName] = useState(printer.printerName);
-  const [connecting, setConnecting] = useState(false);
+  const { state: printerState } = usePrinterStatus();
   const [printing, setPrinting] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
   const [copyChoice, setCopyChoice] = useState<CopyChoice>('both');
-  const [autoCut, setAutoCut] = useState(printer.autoCut);
   const [showPreview, setShowPreview] = useState(false);
   const settings = useReceiptSettings();
   const selectedCopies = COPY_CHOICES.find((c) => c.value === copyChoice)!.copies;
   const previewBytes = useMemo(
-    () => (data && showPreview ? encodeReceiptCopies(data, selectedCopies, { reprint, autoCut, settings }) : null),
-    [data, showPreview, selectedCopies, reprint, autoCut, settings],
+    () => (data && showPreview ? encodeReceiptCopies(data, selectedCopies, { reprint, autoCut: printer.autoCut, settings }) : null),
+    [data, showPreview, selectedCopies, reprint, settings],
   );
-
-  // Keep status live while the dialog is open (USB unplugged, BLE dropped, auto-reconnected).
-  useEffect(() => printer.subscribe(() => {
-    setConnected(printer.isConnected);
-    setPrinterName(printer.printerName);
-  }), []);
 
   useEffect(() => {
     if (!open) return;
-    setConnected(printer.isConnected);
-    setPrinterName(printer.printerName);
     setPrinting(false);
     setLastError(null);
     setCopyChoice('both');
-    setAutoCut(printer.autoCut);
-
     // A printer was set up before but the link dropped — try to restore it silently.
-    if (printer.isConfigured && !printer.isConnected) {
-      setConnecting(true);
-      printer.reconnect().finally(() => setConnecting(false));
-    } else {
-      setConnecting(false);
-    }
+    if (printer.isConfigured && !printer.isConnected) void printer.reconnect();
   }, [open]);
-
-  const handleReconnect = async () => {
-    setConnecting(true);
-    setLastError(null);
-    const ok = await printer.reconnect();
-    setConnecting(false);
-    if (ok) {
-      showToast(`Reconnected to ${printer.printerName}`, 'success');
-    } else {
-      setLastError(`Couldn't reach ${printer.printerName || 'the printer'}. Check power and cable/Bluetooth, or use "Change printer".`);
-    }
-  };
-
-  const handleConnect = async (type: 'bluetooth' | 'serial') => {
-    setConnecting(true);
-    setLastError(null);
-    try {
-      let success = false;
-      if (type === 'bluetooth') {
-        success = await printer.connectBluetooth();
-      } else {
-        success = await printer.connectSerial();
-      }
-      if (success) {
-        setConnected(true);
-        setPrinterName(printer.printerName);
-        showToast(`Connected to ${printer.printerName}`, 'success');
-      }
-    } catch (err) {
-      setLastError((err as Error).message);
-    } finally {
-      setConnecting(false);
-    }
-  };
-
-  const handleDisconnect = () => {
-    printer.disconnect();
-    setConnected(false);
-    setPrinterName('');
-    showToast('Printer disconnected', 'success');
-  };
 
   const handlePrint = async () => {
     if (!data) return;
@@ -123,9 +66,6 @@ export function PrintDialog({ data, open, onOpenChange, reprint = false }: Print
   };
 
 
-  const hasWebBluetooth = printer.isWebBluetoothAvailable;
-  const hasWebSerial = printer.isWebSerialAvailable;
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className={showPreview ? 'sm:max-w-lg max-h-[90vh] flex flex-col' : 'sm:max-w-sm'} showCloseButton={!printing}>
@@ -141,95 +81,7 @@ export function PrintDialog({ data, open, onOpenChange, reprint = false }: Print
 
         {/* Only this middle section scrolls; header and Print button stay visible. */}
         <div className="min-h-0 flex-1 overflow-y-auto space-y-3 py-2">
-          {/* Connection status */}
-          {connected ? (
-            <div className="flex items-center gap-2 text-sm text-green-600">
-              <CheckCircle className="size-4" />
-              <span className="font-medium">{printerName || 'Printer connected'}</span>
-            </div>
-          ) : printer.isConfigured ? (
-            <div className="flex items-center gap-2 text-sm text-destructive">
-              <Warning className="size-4" />
-              <span className="font-medium">{printerName || 'Printer'} is not connected</span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Warning className="size-4" />
-              <span>No printer connected</span>
-            </div>
-          )}
-
-          {/* Saved printer dropped: one-click reconnect, no device picker */}
-          {!connected && !connecting && printer.isConfigured && (
-            <Button variant="outline" size="sm" onClick={handleReconnect}>
-              <ArrowsClockwise className="size-3.5 mr-1.5" />
-              Reconnect
-            </Button>
-          )}
-
-          {/* Connect buttons */}
-          {!connected && !connecting && (
-            <div className="flex flex-wrap items-center gap-2">
-              {printer.isConfigured && (
-                <span className="text-xs text-muted-foreground">Change printer:</span>
-              )}
-              {hasWebBluetooth && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleConnect('bluetooth')}
-                >
-                  <Bluetooth className="size-3.5 mr-1.5" />
-                  Bluetooth
-                </Button>
-              )}
-              {hasWebSerial && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleConnect('serial')}
-                >
-                  <Usb className="size-3.5 mr-1.5" />
-                  USB
-                </Button>
-              )}
-            </div>
-          )}
-
-          {connecting && (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Spinner className="size-4" />
-              <span>{printer.isConfigured ? 'Reconnecting to printer...' : 'Connecting...'}</span>
-            </div>
-          )}
-
-          {connected && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-destructive h-7 text-xs"
-              onClick={handleDisconnect}
-            >
-              Disconnect
-            </Button>
-          )}
-
-          {/* Per-printer: cutter or tear-off. Remembered on this device. */}
-          {printer.isConfigured && (
-            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
-              <input
-                type="checkbox"
-                className="size-3.5 accent-current"
-                checked={autoCut}
-                onChange={(e) => {
-                  printer.autoCut = e.target.checked;
-                  setAutoCut(e.target.checked);
-                }}
-                disabled={printing}
-              />
-              Printer has an auto-cutter
-            </label>
-          )}
+          <PrinterConnectPanel disabled={printing} />
 
           {/* Which copies to print */}
           <div className="flex items-center gap-2">
@@ -276,7 +128,7 @@ export function PrintDialog({ data, open, onOpenChange, reprint = false }: Print
           <Button
             className="bg-accent hover:bg-accent/90 text-accent-foreground"
             onClick={handlePrint}
-            disabled={printing || connecting || !printer.isConfigured}
+            disabled={printing || printerState === 'connecting' || printerState === 'none'}
           >
             {printing ? <Spinner className="size-4 mr-2" /> : null}
             {printing ? 'Printing...' : 'Print'}
