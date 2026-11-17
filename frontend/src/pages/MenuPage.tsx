@@ -22,8 +22,15 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { Plus, PencilSimple, Trash, X, ListPlus } from '@phosphor-icons/react';
 import type { Category, InventoryItem } from '@/types/api';
 
-interface MenuItem { id: number; name: string; price: number; category_id: number; is_active: boolean; description: string | null; category: Category; }
+interface MenuItem { id: number; name: string; price: number; category_id: number; is_active: boolean; description: string | null; category: Category; food_cost?: number; margin?: number | null; }
 interface Recipe { id: number; quantity: number; inventory_item: InventoryItem; }
+
+/** Margin %, coloured: under 30% is worth a look at the price or recipe. */
+function MarginText({ margin }: { margin?: number | null }) {
+  if (margin === null || margin === undefined) return <span className="text-muted-foreground">—</span>;
+  const tone = margin < 0 ? 'text-destructive' : margin < 30 ? 'text-amber-600' : 'text-green-600';
+  return <span className={`font-medium tabular-nums ${tone}`}>{margin}%</span>;
+}
 
 export function MenuPage() {
   const { hasPermission } = useAuth();
@@ -35,6 +42,7 @@ export function MenuPage() {
   const [editing, setEditing] = useState<MenuItem | null>(null);
   const [form, setForm] = useState({ name: '', price: '', category_id: '', description: '' });
   const [search, setSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<number | 'all'>('all');
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [submitLoading, setSubmitLoading] = useState(false);
 
@@ -52,10 +60,12 @@ export function MenuPage() {
   const [deleteCategoryId, setDeleteCategoryId] = useState<number | null>(null);
 
   const filtered = useMemo(() =>
-    items.filter((i) =>
-      i.name.toLowerCase().includes(search.toLowerCase()) ||
-      i.category?.name.toLowerCase().includes(search.toLowerCase())
-    ), [items, search]);
+    items
+      .filter((i) => categoryFilter === 'all' || i.category_id === categoryFilter)
+      .filter((i) =>
+        i.name.toLowerCase().includes(search.toLowerCase()) ||
+        i.category?.name.toLowerCase().includes(search.toLowerCase())
+      ), [items, search, categoryFilter]);
 
   const load = async () => {
     try {
@@ -234,7 +244,7 @@ export function MenuPage() {
 
   return (
     <TooltipProvider>
-    <div className="flex flex-col gap-6 p-4 sm:p-6">
+    <div className="flex flex-col gap-4 md:gap-6 p-3 sm:p-6">
       <PageHeader
         title="Menu Management"
         description="Manage menu items, categories, pricing, and recipes"
@@ -242,25 +252,63 @@ export function MenuPage() {
           <div className="flex gap-2">
             {hasPermission('categories:view') && (
               <Button variant="outline" onClick={() => openCategoryDialog()}>
-                <ListPlus className="size-4 mr-1" /> Categories
+                <ListPlus className="size-4 sm:mr-1" /><span className="hidden sm:inline">Categories</span>
               </Button>
             )}
-            <Button onClick={openCreate} className="bg-accent hover:bg-accent/90 text-accent-foreground"><Plus className="size-4 mr-1" /> Add Item</Button>
+            <Button onClick={openCreate} className="bg-accent hover:bg-accent/90 text-accent-foreground"><Plus className="size-4 sm:mr-1" /><span className="hidden sm:inline">Add Item</span></Button>
           </div>
         }
       />
-      <SearchInput value={search} onChange={setSearch} placeholder="Search menu items..." />
+      <div className="space-y-3">
+        <SearchInput value={search} onChange={setSearch} placeholder="Search menu items..." />
+        <div className="-mx-3 px-3 sm:mx-0 sm:px-0 flex gap-2 overflow-x-auto no-scrollbar">
+          {[{ id: 'all' as const, name: 'All' }, ...categories].map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => setCategoryFilter(c.id)}
+              className={`shrink-0 h-9 rounded-full border px-3.5 text-sm font-medium transition-colors ${categoryFilter === c.id ? 'bg-foreground text-background border-foreground' : 'hover:bg-muted'}`}
+            >
+              {c.name}
+            </button>
+          ))}
+        </div>
+      </div>
       {loading ? (
         <TableSkeleton columns={5} />
       ) : filtered.length === 0 ? (
         <EmptyState title={search ? 'No menu items match your search' : 'No menu items found'} description={search ? 'Try a different search term' : 'Create your first menu item to get started'} action={!search ? <Button onClick={openCreate} size="sm">Add Item</Button> : undefined} />
       ) : (
+        <>
+        {/* Phone: cards */}
+        <ul className="md:hidden space-y-2">
+          {filtered.map((item) => (
+            <li key={item.id} className="rounded-xl border bg-card p-3 flex items-center gap-3">
+              <button type="button" className="flex-1 min-w-0 text-left" onClick={() => openEdit(item)}>
+                <div className="font-medium truncate">{item.name}</div>
+                <div className="text-xs text-muted-foreground">{item.category?.name}{!item.is_active && ' · Inactive'}</div>
+                {(item.food_cost ?? 0) > 0 && (
+                  <div className="text-xs text-muted-foreground mt-0.5">Cost {formatPKR(Math.round(item.food_cost!))} · <MarginText margin={item.margin} /></div>
+                )}
+              </button>
+              <div className="text-right">
+                <div className="font-semibold tabular-nums">{formatPKR(item.price)}</div>
+              </div>
+              <Button variant="ghost" size="icon" className="size-9 text-destructive" aria-label={`Deactivate ${item.name}`} onClick={() => setDeleteId(item.id)}>
+                <Trash className="size-4" />
+              </Button>
+            </li>
+          ))}
+        </ul>
+        <div className="hidden md:block">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Category</TableHead>
-              <TableHead>Price</TableHead>
+              <TableHead className="text-right">Price</TableHead>
+              <TableHead className="text-right">Food cost</TableHead>
+              <TableHead className="text-right">Margin</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="w-24">Actions</TableHead>
             </TableRow>
@@ -270,7 +318,9 @@ export function MenuPage() {
               <TableRow key={item.id}>
                 <TableCell className="font-medium">{item.name}</TableCell>
                 <TableCell>{item.category?.name}</TableCell>
-                <TableCell>{formatPKR(item.price)}</TableCell>
+                <TableCell className="text-right tabular-nums">{formatPKR(item.price)}</TableCell>
+                <TableCell className="text-right tabular-nums text-muted-foreground">{(item.food_cost ?? 0) > 0 ? formatPKR(Math.round(item.food_cost!)) : '—'}</TableCell>
+                <TableCell className="text-right">{(item.food_cost ?? 0) > 0 ? <MarginText margin={item.margin} /> : <span className="text-muted-foreground">—</span>}</TableCell>
                 <TableCell><StatusBadge status={item.is_active ? 'Active' : 'Inactive'} /></TableCell>
                 <TableCell>
                     <div className="flex gap-1">
@@ -286,6 +336,8 @@ export function MenuPage() {
             ))}
           </TableBody>
         </Table>
+        </div>
+        </>
       )}
 
       <Drawer open={drawerOpen} onOpenChange={setDrawerOpen} swipeDirection="right">

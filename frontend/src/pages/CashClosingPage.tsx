@@ -26,6 +26,8 @@ import { LockSimple, Printer, Warning } from '@phosphor-icons/react';
 interface Closing {
   id: number;
   expected_cash: number;
+  opening_float: number;
+  non_cash_amount: number;
   counted_cash: number;
   variance: number;
   note: string | null;
@@ -40,6 +42,8 @@ interface CashierRow {
   voided_count: number;
   voided_amount: number;
   expected_cash: number;
+  non_cash_amount: number;
+  non_cash: { method: string; label: string; amount: number }[];
   pending_voids: number;
   closing: Closing | null;
   changed_since_close: boolean;
@@ -51,6 +55,7 @@ interface Report {
     sales_count: number;
     voided_amount: number;
     expected_cash: number;
+    non_cash_amount: number;
     counted_cash: number;
     variance: number;
     pending_voids: number;
@@ -77,6 +82,7 @@ export function CashClosingPage() {
 
   const [closingFor, setClosingFor] = useState<CashierRow | null>(null);
   const [counted, setCounted] = useState('');
+  const [openingFloat, setOpeningFloat] = useState('');
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -102,13 +108,24 @@ export function CashClosingPage() {
 
   const countedNum = counted.trim() === '' ? null : Number(counted);
   const countedValid = countedNum !== null && Number.isInteger(countedNum) && countedNum >= 0;
+  const floatNum = openingFloat.trim() === '' ? 0 : Number(openingFloat);
+
+  const openClose = (c: CashierRow) => {
+    setCounted('');
+    setNote('');
+    setOpeningFloat('');
+    setClosingFor(c);
+  };
 
   const submitClose = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!closingFor || !countedValid) return;
     setSaving(true);
     try {
-      await api.post('/cash-closing', { date: day, user_id: closingFor.user_id, counted_cash: countedNum, note: note || null });
+      await api.post('/cash-closing', {
+        date: day, user_id: closingFor.user_id, counted_cash: countedNum,
+        opening_float: floatNum, note: note || null,
+      });
       showToast(`${closingFor.name}'s drawer closed`, 'success');
       setClosingFor(null);
       load();
@@ -130,6 +147,8 @@ export function CashClosingPage() {
       voided_amount: c.voided_amount,
       // Print what was actually closed; fall back to live figures for open drawers.
       expected_cash: c.closing?.expected_cash ?? c.expected_cash,
+      opening_float: c.closing?.opening_float ?? 0,
+      non_cash: c.non_cash.map((m) => ({ label: m.label, amount: m.amount })),
       counted_cash: c.closing?.counted_cash ?? null,
       variance: c.closing?.variance ?? null,
       closed_by: c.closing?.closed_by ?? null,
@@ -157,10 +176,29 @@ export function CashClosingPage() {
   };
 
   const totals = report?.totals;
-  const previewVariance = closingFor && countedValid ? countedNum! - closingFor.expected_cash : null;
+
+  const status = (c: CashierRow) => c.closing ? (
+    <div className="space-y-1">
+      <Badge variant="secondary"><LockSimple className="size-3 mr-1" /> Closed</Badge>
+      <div className="text-xs text-muted-foreground">by {c.closing.closed_by}, {formatDateTime(c.closing.closed_at)}</div>
+      {c.closing.note && <div className="text-xs text-muted-foreground">“{c.closing.note}”</div>}
+      {c.changed_since_close && (
+        <div className="flex items-center gap-1 text-xs text-amber-600">
+          <Warning className="size-3.5" /> Voids approved after closing — cash is now {formatPKR(c.expected_cash)}
+        </div>
+      )}
+    </div>
+  ) : c.pending_voids > 0 ? (
+    <span className="text-xs text-amber-600">{c.pending_voids} pending void(s) — resolve before closing</span>
+  ) : canClose && !isFuture ? (
+    <Button size="sm" className="w-full md:w-auto" onClick={() => openClose(c)}>Count &amp; close</Button>
+  ) : (
+    <Badge variant="outline">Open</Badge>
+  );
+  const previewVariance = closingFor && countedValid ? countedNum! - floatNum - closingFor.expected_cash : null;
 
   return (
-    <div className="flex flex-col gap-6 p-4 sm:p-6">
+    <div className="flex flex-col gap-4 md:gap-6 p-3 sm:p-6">
       <PageHeader
         title="Cash Closing"
         description="Count each cashier's drawer at day end and record any shortage or excess"
@@ -177,12 +215,12 @@ export function CashClosingPage() {
         <EmptyState title="No sales on this date" description="There is no cash to close." />
       ) : (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
             <Card>
-              <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Expected cash</CardTitle></CardHeader>
+              <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">Cash sales</CardTitle></CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{formatPKR(totals.expected_cash)}</div>
-                <p className="text-xs text-muted-foreground mt-1">{totals.sales_count} sales{totals.voided_amount > 0 && ` · ${formatPKR(totals.voided_amount)} voided`}</p>
+                <p className="text-xs text-muted-foreground mt-1">{totals.sales_count} sales{totals.non_cash_amount > 0 && ` · ${formatPKR(totals.non_cash_amount)} card/wallet`}{totals.voided_amount > 0 && ` · ${formatPKR(totals.voided_amount)} voided`}</p>
               </CardContent>
             </Card>
             <Card>
@@ -202,62 +240,84 @@ export function CashClosingPage() {
             </Card>
           </div>
 
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Cashier</TableHead>
-                <TableHead className="text-right">Sales</TableHead>
-                <TableHead className="text-right">Voids</TableHead>
-                <TableHead className="text-right">Expected</TableHead>
-                <TableHead className="text-right">Counted</TableHead>
-                <TableHead>Difference</TableHead>
-                <TableHead className="w-56">Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {report.cashiers.map((c) => (
-                <TableRow key={c.user_id}>
-                  <TableCell className="font-medium">{c.name}</TableCell>
-                  <TableCell className="text-right">{c.sales_count}</TableCell>
-                  <TableCell className="text-right">{c.voided_count > 0 ? `${c.voided_count} · ${formatPKR(c.voided_amount)}` : '—'}</TableCell>
-                  <TableCell className="text-right font-medium">{formatPKR(c.closing?.expected_cash ?? c.expected_cash)}</TableCell>
-                  <TableCell className="text-right">{c.closing ? formatPKR(c.closing.counted_cash) : '—'}</TableCell>
-                  <TableCell>{c.closing ? <Variance value={c.closing.variance} /> : '—'}</TableCell>
-                  <TableCell>
-                    {c.closing ? (
-                      <div className="space-y-1">
-                        <Badge variant="secondary"><LockSimple className="size-3 mr-1" /> Closed</Badge>
-                        <div className="text-xs text-muted-foreground">by {c.closing.closed_by}, {formatDateTime(c.closing.closed_at)}</div>
-                        {c.closing.note && <div className="text-xs text-muted-foreground">“{c.closing.note}”</div>}
-                        {c.changed_since_close && (
-                          <div className="flex items-center gap-1 text-xs text-amber-600">
-                            <Warning className="size-3.5" /> Voids approved after closing — expected is now {formatPKR(c.expected_cash)}
-                          </div>
-                        )}
-                      </div>
-                    ) : c.pending_voids > 0 ? (
-                      <span className="text-xs text-amber-600">{c.pending_voids} pending void(s) — resolve before closing</span>
-                    ) : canClose && !isFuture ? (
-                      <Button size="sm" onClick={() => { setCounted(''); setNote(''); setClosingFor(c); }}>Count &amp; close</Button>
-                    ) : (
-                      <Badge variant="outline">Open</Badge>
-                    )}
-                  </TableCell>
+          {/* Phone: one card per drawer */}
+          <ul className="md:hidden space-y-2">
+            {report.cashiers.map((c) => (
+              <li key={c.user_id} className="rounded-xl border bg-card p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold">{c.name}</span>
+                  <span className="text-xs text-muted-foreground">{c.sales_count} sales</span>
+                </div>
+                <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
+                  <dt className="text-muted-foreground">Cash sales</dt>
+                  <dd className="text-right font-medium tabular-nums">{formatPKR(c.closing?.expected_cash ?? c.expected_cash)}</dd>
+                  {c.non_cash_amount > 0 && (<>
+                    <dt className="text-muted-foreground">Card / wallet</dt>
+                    <dd className="text-right tabular-nums">{formatPKR(c.non_cash_amount)}</dd>
+                  </>)}
+                  {c.voided_count > 0 && (<>
+                    <dt className="text-muted-foreground">Voids ({c.voided_count})</dt>
+                    <dd className="text-right tabular-nums">−{formatPKR(c.voided_amount)}</dd>
+                  </>)}
+                  {c.closing && (<>
+                    <dt className="text-muted-foreground">Counted</dt>
+                    <dd className="text-right tabular-nums">{formatPKR(c.closing.counted_cash)}</dd>
+                    <dt className="text-muted-foreground">Difference</dt>
+                    <dd className="text-right"><Variance value={c.closing.variance} /></dd>
+                  </>)}
+                </dl>
+                <div>{status(c)}</div>
+              </li>
+            ))}
+          </ul>
+
+          <div className="hidden md:block">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Cashier</TableHead>
+                  <TableHead className="text-right">Sales</TableHead>
+                  <TableHead className="text-right">Voids</TableHead>
+                  <TableHead className="text-right">Card / wallet</TableHead>
+                  <TableHead className="text-right">Cash expected</TableHead>
+                  <TableHead className="text-right">Counted</TableHead>
+                  <TableHead>Difference</TableHead>
+                  <TableHead className="w-56">Status</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-            <TableFooter>
-              <TableRow>
-                <TableCell className="font-semibold">Day total</TableCell>
-                <TableCell className="text-right">{totals.sales_count}</TableCell>
-                <TableCell className="text-right">{totals.voided_amount > 0 ? formatPKR(totals.voided_amount) : '—'}</TableCell>
-                <TableCell className="text-right font-semibold">{formatPKR(totals.expected_cash)}</TableCell>
-                <TableCell className="text-right">{formatPKR(totals.counted_cash)}</TableCell>
-                <TableCell><Variance value={totals.variance} /></TableCell>
-                <TableCell />
-              </TableRow>
-            </TableFooter>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {report.cashiers.map((c) => (
+                  <TableRow key={c.user_id}>
+                    <TableCell className="font-medium">{c.name}</TableCell>
+                    <TableCell className="text-right">{c.sales_count}</TableCell>
+                    <TableCell className="text-right">{c.voided_count > 0 ? `${c.voided_count} · ${formatPKR(c.voided_amount)}` : '—'}</TableCell>
+                    <TableCell className="text-right" title={c.non_cash.map((m) => `${m.label}: ${formatPKR(m.amount)}`).join('\n')}>
+                      {c.non_cash_amount > 0 ? formatPKR(c.non_cash_amount) : '—'}
+                    </TableCell>
+                    <TableCell className="text-right font-medium">{formatPKR(c.closing?.expected_cash ?? c.expected_cash)}</TableCell>
+                    <TableCell className="text-right">
+                      {c.closing ? formatPKR(c.closing.counted_cash) : '—'}
+                      {c.closing && c.closing.opening_float > 0 && <div className="text-xs text-muted-foreground">incl. float {formatPKR(c.closing.opening_float)}</div>}
+                    </TableCell>
+                    <TableCell>{c.closing ? <Variance value={c.closing.variance} /> : '—'}</TableCell>
+                    <TableCell>{status(c)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+              <TableFooter>
+                <TableRow>
+                  <TableCell className="font-semibold">Day total</TableCell>
+                  <TableCell className="text-right">{totals.sales_count}</TableCell>
+                  <TableCell className="text-right">{totals.voided_amount > 0 ? formatPKR(totals.voided_amount) : '—'}</TableCell>
+                  <TableCell className="text-right">{totals.non_cash_amount > 0 ? formatPKR(totals.non_cash_amount) : '—'}</TableCell>
+                  <TableCell className="text-right font-semibold">{formatPKR(totals.expected_cash)}</TableCell>
+                  <TableCell className="text-right">{formatPKR(totals.counted_cash)}</TableCell>
+                  <TableCell><Variance value={totals.variance} /></TableCell>
+                  <TableCell />
+                </TableRow>
+              </TableFooter>
+            </Table>
+          </div>
         </>
       )}
 
@@ -275,8 +335,15 @@ export function CashClosingPage() {
                 {closingFor.voided_count > 0 && (
                   <div className="flex justify-between text-muted-foreground"><span>Voids ({closingFor.voided_count})</span><span>−{formatPKR(closingFor.voided_amount)}</span></div>
                 )}
-                <div className="flex justify-between font-semibold border-t pt-1"><span>Expected cash</span><span>{formatPKR(closingFor.expected_cash)}</span></div>
+                <div className="flex justify-between font-semibold border-t pt-1"><span>Cash sales</span><span>{formatPKR(closingFor.expected_cash)}</span></div>
+                {closingFor.non_cash.map((m) => (
+                  <div key={m.method} className="flex justify-between text-muted-foreground"><span>{m.label} (not in drawer)</span><span>{formatPKR(m.amount)}</span></div>
+                ))}
               </div>
+              <FormField label="Opening float — change the drawer started with (PKR)">
+                <Input type="text" inputMode="numeric" pattern="[0-9]*" value={openingFloat} onChange={(e) => setOpeningFloat(e.target.value.replace(/[^0-9]/g, ''))} placeholder="0" />
+              </FormField>
+              <div className="flex justify-between text-sm font-semibold"><span>Should be in drawer</span><span>{formatPKR(floatNum + closingFor.expected_cash)}</span></div>
               <FormField label="Cash counted in drawer (PKR)" required>
                 <Input type="text" inputMode="numeric" pattern="[0-9]*" value={counted} onChange={(e) => setCounted(e.target.value)} autoFocus required />
               </FormField>

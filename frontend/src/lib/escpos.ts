@@ -352,6 +352,8 @@ export interface CashClosingSlipRow {
   voided_count: number;
   voided_amount: number;
   expected_cash: number;
+  opening_float: number;
+  non_cash: { label: string; amount: number }[];
   counted_cash: number | null;
   variance: number | null;
   closed_by: string | null;
@@ -397,7 +399,12 @@ export function encodeCashClosing(
     parts.push(bold(true), text(row.name + '\n'), bold(false));
     parts.push(pair('Sales', String(row.sales_count)));
     if (row.voided_count > 0) parts.push(pair(`Voids (${row.voided_count})`, `-Rs.${commas(row.voided_amount)}`));
-    parts.push(pair('Expected cash', `Rs.${commas(row.expected_cash)}`));
+    for (const m of row.non_cash) parts.push(pair(`${m.label} (not cash)`, `Rs.${commas(m.amount)}`));
+    parts.push(pair('Cash sales', `Rs.${commas(row.expected_cash)}`));
+    if (row.opening_float > 0) {
+      parts.push(pair('Opening float', `Rs.${commas(row.opening_float)}`));
+      parts.push(pair('Should be in drawer', `Rs.${commas(row.opening_float + row.expected_cash)}`));
+    }
     if (row.counted_cash === null) {
       parts.push(pair('Counted cash', 'NOT CLOSED'));
     } else {
@@ -414,7 +421,9 @@ export function encodeCashClosing(
   parts.push(bold(true), text('DAY TOTAL\n'), bold(false));
   parts.push(pair('Sales', String(total((r) => r.sales_count))));
   parts.push(pair('Voids', `-Rs.${commas(total((r) => r.voided_amount))}`));
-  parts.push(bold(true), pair('Expected cash', `Rs.${commas(total((r) => r.expected_cash))}`), bold(false));
+  const nonCash = total((r) => r.non_cash.reduce((a, m) => a + m.amount, 0));
+  if (nonCash > 0) parts.push(pair('Card / wallet', `Rs.${commas(nonCash)}`));
+  parts.push(bold(true), pair('Cash sales', `Rs.${commas(total((r) => r.expected_cash))}`), bold(false));
   parts.push(pair('Counted cash', `Rs.${commas(closed.reduce((s, r) => s + (r.counted_cash ?? 0), 0))}`));
   parts.push(bold(true), pair('Difference', signedRs(closed.reduce((s, r) => s + (r.variance ?? 0), 0))), bold(false));
   if (closed.length < data.rows.length) {
