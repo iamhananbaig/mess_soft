@@ -375,7 +375,6 @@ export function encodeReceipt(data: ReceiptData, options: EncodeReceiptOptions):
 
   // Payment
   if (settings.show_payment) {
-    parts.push(text('\n'));
     if (isCash && data.amount_received !== null) {
       parts.push(text(twoColumns(`Paid: Rs.${commas(data.amount_received)}`, `Change: Rs.${commas(data.change ?? 0)}`, SAFE_W)));
     } else {
@@ -386,7 +385,6 @@ export function encodeReceipt(data: ReceiptData, options: EncodeReceiptOptions):
 
   // Footer
   if (settings.footer_text) {
-    parts.push(feedLines(1));
     parts.push(rule('-'));
     parts.push(feedLines(1));
     parts.push(align('center'));
