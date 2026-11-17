@@ -128,7 +128,7 @@ export function PrintDialog({ data, open, onOpenChange, reprint = false }: Print
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={showPreview ? 'sm:max-w-md max-h-[90vh] flex flex-col' : 'sm:max-w-sm'} showCloseButton={!printing}>
+      <DialogContent className={showPreview ? 'sm:max-w-lg max-h-[90vh] flex flex-col' : 'sm:max-w-sm'} showCloseButton={!printing}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Printer className="size-4" />
@@ -139,7 +139,8 @@ export function PrintDialog({ data, open, onOpenChange, reprint = false }: Print
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3 py-2">
+        {/* Only this middle section scrolls; header and Print button stay visible. */}
+        <div className="min-h-0 flex-1 overflow-y-auto space-y-3 py-2">
           {/* Connection status */}
           {connected ? (
             <div className="flex items-center gap-2 text-sm text-green-600">
@@ -254,7 +255,7 @@ export function PrintDialog({ data, open, onOpenChange, reprint = false }: Print
             {showPreview ? 'Hide preview' : 'Show preview'}
           </Button>
           {previewBytes && (
-            <div className="max-h-[45vh] overflow-auto rounded-md bg-muted p-3 flex justify-center">
+            <div className="overflow-x-auto rounded-md bg-muted p-3">
               <SlipPreview bytes={previewBytes} />
             </div>
           )}

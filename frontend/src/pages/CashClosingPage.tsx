@@ -297,7 +297,7 @@ export function CashClosingPage() {
 
       {/* Closing slip */}
       <Dialog open={printOpen} onOpenChange={setPrintOpen}>
-        <DialogContent className="sm:max-w-md max-h-[90vh] flex flex-col">
+        <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Closing slip — {format(date, 'dd-MMM-yyyy')}</DialogTitle>
             {totals && totals.closed_count < totals.cashier_count && (
@@ -306,7 +306,7 @@ export function CashClosingPage() {
               </DialogDescription>
             )}
           </DialogHeader>
-          <div className="flex-1 overflow-auto rounded-md bg-muted p-3 flex justify-center">
+          <div className="min-h-0 flex-1 overflow-auto rounded-md bg-muted p-3">
             {slipBytes && <SlipPreview bytes={slipBytes} />}
           </div>
           <DialogFooter>

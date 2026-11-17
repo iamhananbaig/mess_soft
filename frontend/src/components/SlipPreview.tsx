@@ -11,7 +11,7 @@ export function SlipPreview({ bytes, className }: { bytes: Uint8Array; className
 
   return (
     <div
-      className={cn('rounded-sm bg-white text-black shadow-md ring-1 ring-black/10 px-3 py-4 font-mono text-[11px] leading-[1.35]', className)}
+      className={cn('mx-auto shrink-0 rounded-sm bg-white text-black shadow-md ring-1 ring-black/10 px-3 py-4 font-mono text-[11px] leading-[1.35]', className)}
       style={{ width: `calc(${model.columns}ch + 1.5rem)` }}
       aria-label="Receipt preview"
     >

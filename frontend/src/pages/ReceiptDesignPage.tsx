@@ -192,7 +192,7 @@ export function ReceiptDesignPage() {
         </fieldset>
 
         {/* Live preview */}
-        <div className="flex flex-col gap-3 lg:sticky lg:top-4 lg:self-start">
+        <div className="flex flex-col gap-3 lg:self-start">
           <div className="flex flex-wrap items-center gap-1">
             {(['customer', 'accounts', 'both'] as const).map((c) => (
               <Button key={c} type="button" size="sm" variant={previewCopies === c ? 'default' : 'outline'} className="h-7 text-xs capitalize" onClick={() => setPreviewCopies(c)}>
@@ -204,7 +204,8 @@ export function ReceiptDesignPage() {
             <label className="flex items-center gap-2"><Switch size="sm" checked={asReprint} onCheckedChange={setAsReprint} /> Reprint</label>
             <label className="flex items-center gap-2"><Switch size="sm" checked={asVoided} onCheckedChange={setAsVoided} /> Voided sale</label>
           </div>
-          <div className="max-h-[75vh] overflow-auto rounded-lg bg-muted p-4 flex justify-center">
+          {/* Full-length slip; the page scrolls rather than a fixed-height box. */}
+          <div className="overflow-x-auto rounded-lg bg-muted p-4">
             {bytes && <SlipPreview bytes={bytes} />}
           </div>
           <Button variant="outline" onClick={testPrint} disabled={testPrinting || !printer.isConfigured}>

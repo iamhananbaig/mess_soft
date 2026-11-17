@@ -25,11 +25,11 @@ export function ReceiptModal({ data, open, onOpenChange, onPrint }: ReceiptModal
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md max-h-[85vh] flex flex-col">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Receipt #{data.receipt_number}</DialogTitle>
         </DialogHeader>
-        <div className="flex-1 overflow-auto flex justify-center rounded-md bg-muted p-3">
+        <div className="min-h-0 flex-1 overflow-auto rounded-md bg-muted p-3">
           <SlipPreview bytes={bytes} />
         </div>
         <DialogFooter>
