@@ -1,396 +1,111 @@
-# Code Conventions & Patterns
+# Conventions
 
----
+How code is written in this project. Match what's here; when in doubt, copy the
+nearest existing example.
 
-## Laravel Backend
+## Backend (Laravel, `api/`)
 
-### Migration template
+**Controllers** live in `app/Http/Controllers/Api/`, validate inline with
+`$request->validate([...])`, and return `response()->json(...)`. Business-rule failures
+return `422` with `{ "message": "…" }` — never a 500.
+
+**Anything that changes stock or money runs in a transaction and locks rows:**
+
 ```php
-<?php
-
-use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
-
-return new class extends Migration
-{
-    public function up(): void
-    {
-        Schema::create('table_name', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            $table->string('name');
-            $table->bigInteger('price'); // PKR
-            $table->boolean('is_active')->default(true);
-            $table->timestamps();
-
-            // Indexes
-            $table->index('is_active');
-        });
-    }
-
-    public function down(): void
-    {
-        Schema::dropIfExists('table_name');
-    }
-};
-```
-
-### Model template
-```php
-<?php
-
-namespace App\Models;
-
-use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
-
-class MenuItem extends Model
-{
-    use HasFactory;
-
-    protected $fillable = ['category_id', 'name', 'description', 'price', 'image', 'is_active'];
-    protected $casts = ['price' => 'integer', 'is_active' => 'boolean'];
-
-    public function category(): BelongsTo
-    {
-        return $this->belongsTo(Category::class);
-    }
-
-    public function recipes(): HasMany
-    {
-        return $this->hasMany(Recipe::class);
-    }
-
-    public function scopeActive($query)
-    {
-        return $query->where('is_active', true);
-    }
-}
-```
-
-### Controller template
-```php
-<?php
-
-namespace App\Http\Controllers\Api;
-
-use App\Http\Controllers\Controller;
-use App\Models\MenuItem;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
-
-class MenuItemController extends Controller
-{
-    public function index(Request $request): JsonResponse
-    {
-        $items = MenuItem::with('category')
-            ->when($request->category_id, fn($q, $catId) => $q->where('category_id', $catId))
-            ->active()
-            ->orderBy('name')
-            ->get();
-
-        return response()->json($items);
-    }
-
-    public function store(Request $request): JsonResponse
-    {
-        $validated = $request->validate([
-            'category_id' => 'required|exists:categories,id',
-            'name' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'price' => 'required|integer|min:0',
-            'image' => 'nullable|string|max:255',
-        ]);
-
-        $item = MenuItem::create($validated);
-        return response()->json($item->load('category'), 201);
-    }
-
-    public function show(MenuItem $menuItem): JsonResponse
-    {
-        return response()->json($menuItem->load(['category', 'recipes.inventoryItem']));
-    }
-
-    public function update(Request $request, MenuItem $menuItem): JsonResponse
-    {
-        $validated = $request->validate([
-            'category_id' => 'sometimes|exists:categories,id',
-            'name' => 'sometimes|string|max:255',
-            'description' => 'nullable|string',
-            'price' => 'sometimes|integer|min:0',
-            'image' => 'nullable|string|max:255',
-            'is_active' => 'sometimes|boolean',
-        ]);
-
-        $menuItem->update($validated);
-        return response()->json($menuItem->load('category'));
-    }
-
-    public function destroy(MenuItem $menuItem): JsonResponse
-    {
-        $menuItem->update(['is_active' => false]);
-        return response()->json(['message' => 'Menu item deactivated']);
-    }
-}
-```
-
-### Stock validation pattern (sales)
-```php
-use Illuminate\Support\Facades\DB;
-
-DB::transaction(function () use ($items) {
-    foreach ($items as $item) {
-        $menuItem = MenuItem::with('recipes.inventoryItem')->findOrFail($item['menu_item_id']);
-
-        foreach ($menuItem->recipes as $recipe) {
-            $needed = $recipe->quantity * $item['quantity'];
-            $inventory = $recipe->inventoryItem;
-
-            if ($inventory->current_stock < $needed) {
-                abort(422, "Insufficient stock for {$inventory->name}");
-            }
-        }
-    }
-
-    // Create sale, deduct stock, create movements
-    // ...
+return DB::transaction(function () use ($validated) {
+    $item = InventoryItem::lockForUpdate()->findOrFail($validated['inventory_item_id']);
+    // check, change, then write a StockMovement for every stock change
 });
 ```
 
----
+Closures need every outer variable in `use (...)` — forgetting one is the most common
+bug here (tests catch it as a 500).
 
-## React Frontend
+**Stock:** every change to `current_stock` writes a `stock_movements` row with
+`type`, `source`, signed `quantity` and `unit_cost`. Reports and void reversal depend on it.
 
-### Component structure
-```
-frontend/src/
-├── components/           # Shared/reusable components
-│   ├── ui/               # shadcn/ui components (auto-generated)
-│   ├── Layout.tsx        # Sidebar + header shell
-│   └── Receipt.tsx       # Receipt preview component
-├── pages/                # Route-level components
-│   ├── LoginPage.tsx
-│   ├── POSPage.tsx
-│   ├── MenuPage.tsx
-│   ├── InventoryPage.tsx
-│   ├── RecipePage.tsx
-│   ├── ReportsPage.tsx
-│   ├── ConsumptionPage.tsx
-│   └── EmployeesPage.tsx
-├── contexts/             # React contexts
-│   └── AuthContext.tsx
-├── services/             # API layer
-│   └── api.ts            # Axios instance + interceptors
-├── App.tsx               # Router setup
-├── main.tsx              # Entry point
-└── index.css             # Tailwind imports
+**Money** is integer PKR. Quantities and costs are decimals; cast with `(float)` /
+`(int)` before arithmetic or JSON — MySQL returns `SUM()` as a string.
+
+**Audit:** sensitive changes call `Activity::log($action, $description, $subject, $changes)`
+(`App\Support\Activity`). For updates, record only what changed:
+
+```php
+$before = $menu->only(array_keys($validated));
+$menu->update($validated);
+Activity::log('menu.updated', "Updated menu item {$menu->name}", $menu,
+    Activity::diff($before, $menu->only(array_keys($validated))));
 ```
 
-### Component template
-```tsx
-import { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import api from '@/services/api';
+**History is never deleted.** Menu items are deactivated (`is_active = false`); history
+tables use `RESTRICT` foreign keys.
 
-export function MenuPage() {
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
+### Migrations
 
-  useEffect(() => {
-    api.get('/menu').then(res => {
-      setItems(res.data);
-      setLoading(false);
-    });
-  }, []);
+- Always reversible (`down()` undoes `up()`); test `migrate` → `migrate:rollback` → `migrate` on **MySQL**, not just SQLite.
+- Production data exists: add columns with defaults or `nullable`, backfill in the same
+  migration when needed, never rewrite history.
+- They run automatically when the `api` container starts — only that container migrates.
 
-  if (loading) return <div>Loading...</div>;
+### Permissions
 
-  return (
-    <div className="grid gap-4">
-      {items.map(item => (
-        <Card key={item.id}>
-          <CardHeader>
-            <CardTitle>{item.name}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-bold">Rs.{item.price}</p>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
-  );
-}
+1. Add the name to `RolesAndPermissionSeeder` (list + role defaults) — this covers fresh installs.
+2. Add a migration that `Permission::findOrCreate()`s it and grants it to existing roles —
+   the seeder never changes roles that already exist (so admins' edits on the Permissions page survive).
+3. Protect the route with `->middleware('permission:x')`, and add the page to
+   `frontend/src/lib/navigation.ts` with the same permission.
+
+### Tests
+
+Feature tests in `api/tests/Feature/` (SQLite in-memory). `TestCase` seeds roles and
+signs in an admin (`$this->authHeaders()`). When a test acts as several users, reset
+the auth guard between them:
+
+```php
+$this->app['auth']->forgetGuards();   // the guard caches the first user
 ```
 
-### API service pattern
-```typescript
-// frontend/src/services/api.ts
-import axios from 'axios';
+Run `php artisan test` and `vendor/bin/pint` before committing.
 
-const api = axios.create({
-  baseURL: 'http://localhost:8000/api/v1',
-});
+## Frontend (React, `frontend/`)
 
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+- **Pages** in `src/pages/`, lazy-loaded in `App.tsx` and wrapped in `<RequirePermission path=…>`.
+  Register each page once in `src/lib/navigation.ts` (sidebar, phone tab bar and guard all read it).
+- **API** via `src/services/api.ts` (Axios, bearer token, 401 → login). Show errors with
+  `showErrorToast(err, 'Fallback text')` — it surfaces the server's message.
+- **UI**: shadcn/ui (base-mira style, **Phosphor** icons — not lucide), Tailwind 4, `cn()` for classes.
+- **Phones first** — cashiers use phones. Lists render as cards on small screens
+  (`md:hidden`) and tables from `md:` up; tap targets ≥ 36 px; filters as horizontally
+  scrolling chips (`no-scrollbar`); page padding `p-3 sm:p-6`.
+- **Money** with `formatPKR()`; dates with `formatDate()` / `formatDateTime()` (`src/lib/format.ts`).
+- **Exports**: build an `ExportDocument` and pass it to `<ExportMenu build={…} />`; the
+  Excel/PDF libraries load only when used.
+- **Charts** (Recharts) use the validated colour tokens `--series-revenue` / `--series-profit`
+  from `index.css`; one y-axis per chart.
+- Lint with `npm run lint` (oxlint) and type-check with `npm run build`.
 
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      window.location.href = '/login';
-    }
-    return Promise.reject(error);
-  }
-);
+## Receipt printing
 
-export default api;
-```
+- `src/lib/escpos.ts` turns receipt data + settings into ESC/POS bytes;
+  `src/lib/escposPreview.ts` reads the same bytes back for on-screen previews, so the
+  preview is what prints. Change layout only in the encoder.
+- Never truncate text on a receipt: use `twoColumns()` (moves the right part to its own
+  line when it doesn't fit).
+- `src/services/printer.ts` owns the USB/Bluetooth connection (auto-reconnect) and
+  never retries a failed print on its own (to avoid duplicate slips).
 
-### Auth context template
-```tsx
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import api from '@/services/api';
+## Naming
 
-interface User {
-  id: number;
-  name: string;
-  email: string;
-  roles: string[];
-  permissions: string[];
-}
+| Thing | Style | Example |
+|---|---|---|
+| Tables / columns | snake_case, plural tables | `stock_movements.unit_cost` |
+| Permissions | `area:action` | `sales:void-approve` |
+| Activity actions | `area.verb` | `stock.adjusted` |
+| API paths | kebab-case | `/cash-closing`, `/void-requests` |
+| React components / pages | PascalCase | `CashClosingPage.tsx` |
+| Hooks | `useX` in `src/hooks/` | `useReceiptSettings` |
 
-interface AuthContextType {
-  user: User | null;
-  token: string | null;
-  login: (email: string, password: string) => Promise<void>;
-  logout: () => void;
-  hasPermission: (permission: string) => boolean;
-}
+## Git
 
-const AuthContext = createContext<AuthContextType | null>(null);
-
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
-
-  useEffect(() => {
-    if (token) {
-      api.get('/me').then(res => setUser(res.data));
-    }
-  }, [token]);
-
-  const login = async (email: string, password: string) => {
-    const res = await api.post('/login', { email, password });
-    localStorage.setItem('token', res.data.token);
-    setToken(res.data.token);
-    setUser(res.data.user);
-  };
-
-  const logout = () => {
-    api.post('/logout');
-    localStorage.removeItem('token');
-    setToken(null);
-    setUser(null);
-  };
-
-  const hasPermission = (permission: string) =>
-    user?.permissions.includes(permission) ?? false;
-
-  return (
-    <AuthContext.Provider value={{ user, token, login, logout, hasPermission }}>
-      {children}
-    </AuthContext.Provider>
-  );
-}
-
-export const useAuth = () => useContext(AuthContext) as AuthContextType;
-```
-
-### Route setup
-```tsx
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider, useAuth } from '@/contexts/AuthContext';
-import { Layout } from '@/components/Layout';
-import { LoginPage } from '@/pages/LoginPage';
-import { POSPage } from '@/pages/POSPage';
-// ... other imports
-
-function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { token } = useAuth();
-  return token ? <>{children}</> : <Navigate to="/login" />;
-}
-
-export default function App() {
-  return (
-    <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-            <Route index element={<POSPage />} />
-            <Route path="menu" element={<MenuPage />} />
-            <Route path="inventory" element={<InventoryPage />} />
-            <Route path="recipes" element={<RecipePage />} />
-            <Route path="reports" element={<ReportsPage />} />
-            <Route path="consumptions" element={<ConsumptionPage />} />
-            <Route path="employees" element={<EmployeesPage />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-    </AuthProvider>
-  );
-}
-```
-
----
-
-## shadcn/ui Setup
-
-### Install
-```bash
-cd frontend
-npx shadcn@latest init
-# Style: New York
-# Base color: Neutral
-# CSS variables: yes
-
-npx shadcn@latest add button card dialog input label select table tabs toast dropdown-menu avatar separator
-```
-
-### cn() utility
-```typescript
-// frontend/src/lib/utils.ts (auto-generated by shadcn)
-import { type ClassValue, clsx } from "clsx";
-import { twMerge } from "tailwind-merge";
-
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
-}
-```
-
----
-
-## Naming Conventions
-
-| What | Convention | Example |
-|------|------------|---------|
-| DB tables | snake_case, plural | `menu_items`, `stock_movements` |
-| DB columns | snake_case | `menu_item_id`, `current_stock` |
-| Models | PascalCase, singular | `MenuItem`, `StockMovement` |
-| Controllers | PascalCase, plural | `MenuItemController` |
-| API URLs | kebab-case, plural | `/api/v1/menu-items` (or `/menu`) |
-| React components | PascalCase | `MenuPage.tsx`, `Receipt.tsx` |
-| React files | PascalCase for components, camelCase for utils | `MenuPage.tsx`, `api.ts` |
-| JS variables | camelCase | `menuItem`, `totalAmount` |
-| CSS classes | Tailwind utility classes | `className="text-lg font-bold"` |
+Branch from `master`, small focused commits with a why in the body, run tests + lint +
+build before pushing.

@@ -1,325 +1,156 @@
-# API Endpoints Quick Reference
+# API Reference
 
-All under `/api/v1/`. Sanctum auth required except login.
-JSON responses. Error format: `{ "message": "...", "errors": {...} }`
+All endpoints are under **`/api/v1`**. Send `Authorization: Bearer <token>` (from
+`/login`) and `Accept: application/json`. Money is integer PKR.
 
----
+- Errors: `{ "message": "…", "errors": { "field": ["…"] } }` — 401 not signed in,
+  403 missing permission, 422 validation or business rule (e.g. insufficient stock).
+- "Permission" is a Spatie permission; `a | b` means either one.
+- Lists that page return Laravel pagination: `{ data, current_page, last_page, total, … }`.
 
 ## Auth
 
-### POST `/api/v1/login`
-No auth required.
-```json
-// Request
-{ "email": "admin@canteen.com", "password": "password" }
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| POST | `/login` | public, 10/min | `{ email, password }` → `{ token, user: { id, name, email, roles[], permissions[] } }`. Deactivated users get 403. |
+| POST | `/logout` | signed in | Revokes the current token. |
+| GET | `/me` | signed in | Same `user` shape as login. |
+| PUT | `/me/password` | signed in, 10/min | `{ current_password, password, password_confirmation }` (min 8). Other sessions are signed out. |
 
-// Response 200
-{
-  "token": "1|abc...",
-  "user": { "id": 1, "name": "Admin", "email": "...", "roles": ["admin"], "permissions": ["menu:create", ...] }
-}
-```
+## Dashboard
 
-### POST `/api/v1/logout`
-Any authenticated user. Revokes current token.
+| Method | Path | Permission |
+|---|---|---|
+| GET | `/dashboard` | `reports:view` |
 
-### GET `/api/v1/me`
-Any authenticated user. Returns user + roles + permissions.
+Returns `today` and `yesterday` (`revenue, transactions, average_ticket, cost, profit,
+voided_count`), `trend` (30 days of `{date, revenue, profit, transactions}`), `hourly`
+(24 × `{hour, revenue, transactions}`), `payments` (today, by method), `top_items`
+(7 days), and `alerts` (`low_stock[]`, `expiring[]` within 7 days, `pending_voids`,
+`open_drawers`, `stock_value`).
 
----
+## Menu, categories, recipes
 
-## Categories
-
-| Method | Endpoint | Permission |
-|--------|----------|------------|
-| GET | `/categories` | any |
-| POST | `/categories` | `menu:create` |
-| PUT | `/categories/{id}` | `menu:edit` |
-| DELETE | `/categories/{id}` | `menu:delete` |
-
-```json
-// POST / PUT body
-{ "name": "Burgers" }
-```
-
----
-
-## Menu Items
-
-| Method | Endpoint | Permission |
-|--------|----------|------------|
-| GET | `/menu` | any |
-| GET | `/menu/{id}` | any |
-| POST | `/menu` | `menu:create` |
-| PUT | `/menu/{id}` | `menu:edit` |
-| DELETE | `/menu/{id}` | `menu:delete` |
-
-```json
-// POST / PUT body
-{
-  "category_id": 1,
-  "name": "Chicken Burger",
-  "description": "Grilled chicken with lettuce",
-  "price": 350,
-  "image": null
-}
-
-// GET /menu response
-{
-  "id": 1,
-  "name": "Chicken Burger",
-  "price": 350,
-  "category": { "id": 1, "name": "Burgers" },
-  "is_active": true
-}
-```
-
-> DELETE is soft-delete: sets `is_active = false`.
-
----
-
-## Recipes
-
-| Method | Endpoint | Permission |
-|--------|----------|------------|
-| GET | `/menu/{id}/recipe` | any |
-| POST | `/menu/{id}/recipe` | `recipes:manage` |
-| PUT | `/recipes/{id}` | `recipes:manage` |
-| DELETE | `/recipes/{id}` | `recipes:manage` |
-
-```json
-// POST body (add ingredient to recipe)
-{ "inventory_item_id": 1, "quantity": 2 }
-
-// PUT body (update quantity)
-{ "quantity": 3 }
-
-// GET /menu/{id}/recipe response
-[
-  { "id": 1, "inventory_item": { "id": 1, "name": "Bun" }, "quantity": 2 },
-  { "id": 2, "inventory_item": { "id": 2, "name": "Chicken Patty" }, "quantity": 1 }
-]
-```
-
----
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET | `/categories` | `categories:view` | |
+| GET | `/categories/{id}` | `categories:view` | |
+| POST | `/categories` | `categories:create` | `{ name }` (unique) |
+| PUT | `/categories/{id}` | `categories:edit` | |
+| DELETE | `/categories/{id}` | `categories:delete` | 422 if it has menu items |
+| GET | `/menu?category_id=` | `menu:view` | Active items with `recipes`, `is_available` (enough stock for one), `food_cost`, `margin` (%) |
+| GET | `/menu/{id}` | `menu:view` | |
+| POST | `/menu` | `menu:create` | `{ category_id, name, price, description?, image? }` |
+| PUT | `/menu/{id}` | `menu:edit` | any of the above + `is_active` |
+| DELETE | `/menu/{id}` | `menu:delete` | Soft: sets `is_active = false` |
+| GET | `/menu/{id}/recipe` | `recipes:manage` | |
+| POST | `/menu/{id}/recipe` | `recipes:manage` | `{ inventory_item_id, quantity }` (quantity per one menu item) |
+| PUT | `/recipes/{id}` | `recipes:manage` | `{ quantity }` |
+| DELETE | `/recipes/{id}` | `recipes:manage` | |
 
 ## Inventory
 
-| Method | Endpoint | Permission |
-|--------|----------|------------|
-| GET | `/inventory` | `inventory:view` |
-| GET | `/inventory/{id}` | `inventory:view` |
-| POST | `/inventory` | `inventory:adjust` |
-| PUT | `/inventory/{id}` | `inventory:adjust` |
-| POST | `/inventory/stock-in` | `inventory:stock-in` |
-| POST | `/inventory/{id}/adjust` | `inventory:adjust` |
-| POST | `/inventory/{id}/expire` | `inventory:adjust` |
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET | `/inventory` | `inventory:view` | Active items incl. `current_stock`, `reorder_level`, `avg_cost`, `expiry_date` |
+| GET | `/inventory/{id}` | `inventory:view` | With stock movements |
+| POST | `/inventory` | `inventory:create` | `{ name, unit, current_stock?, reorder_level?, unit_cost?, expiry_date? }` |
+| PUT | `/inventory/{id}` | `inventory:edit` | `{ name?, unit?, reorder_level?, avg_cost?, expiry_date?, is_active? }` |
+| POST | `/inventory/stock-in` | `inventory:create` | `{ inventory_item_id, quantity, unit_cost? \| total_cost?, expiry_date?, reference?, note? }` — cost updates the weighted average |
+| POST | `/inventory/{id}/adjust` | `inventory:edit` | `{ quantity (signed, ≠ 0), note? }`; can't go below 0 |
+| POST | `/inventory/{id}/expire` | `inventory:edit` | `{ quantity, note? }` |
+| GET | `/consumptions` | `consumptions:view` | `?from&to&inventory_item_id&search&per_page` (paginated) |
+| POST | `/consumptions` | `consumptions:create` | `{ inventory_item_id, quantity, reason }` |
 
-```json
-// POST /inventory body (create item)
-{ "name": "Bun", "unit": "pcs", "current_stock": 100 }
+## Sales & receipts
 
-// POST /inventory/stock-in body
-{ "inventory_item_id": 1, "quantity": 50, "reference": "PO-001", "note": "Weekly restock" }
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| POST | `/sales` | `sales:create` | See below |
+| GET | `/sales` | `sales:view` | `?from&to&user_id&payment_method&per_page` (paginated); includes `voided_at`, `has_pending_void` |
+| GET | `/sales/{id}` | `sales:view` | |
+| GET | `/sales/{id}/receipt` | `sales:view` | Print data: canteen name, date/time, cashier, items, totals, `payment_method` (label), `payment_reference`, `voided` |
 
-// POST /inventory/{id}/adjust body
-{ "quantity": -5, "note": "Damaged" }
-
-// POST /inventory/{id}/expire body
-{ "quantity": 10, "note": "Batch expired" }
-```
-
----
-
-## Sales (POS)
-
-| Method | Endpoint | Permission |
-|--------|----------|------------|
-| POST | `/sales` | `pos:use` |
-| GET | `/sales` | `sales:view-all` |
-| GET | `/sales/{id}` | `sales:view-own` |
-| GET | `/sales/{id}/receipt` | `sales:view-own` |
-
-```json
-// POST /sales body
+```jsonc
+// POST /sales
 {
-  "items": [
-    { "menu_item_id": 1, "quantity": 2 },
-    { "menu_item_id": 5, "quantity": 1 }
-  ],
-  "amount_received": 500
+  "items": [{ "menu_item_id": 1, "quantity": 2 }],
+  "payment_method": "cash",          // optional, default cash; must be enabled in /settings/pos
+  "amount_received": 1000,           // required for cash (≥ total); ignored otherwise
+  "payment_reference": "TX123"       // optional, non-cash only
 }
-
-// POST /sales response 200
-{
-  "id": 42,
-  "total_amount": 450,
-  "amount_received": 500,
-  "change": 50,
-  "items": [
-    { "menu_item_id": 1, "quantity": 2, "unit_price": 200 },
-    { "menu_item_id": 5, "quantity": 1, "unit_price": 50 }
-  ]
-}
-
-// POST /sales response 422 (insufficient stock)
-{ "message": "Insufficient stock for Bun" }
+// 201 → { id, total_amount, amount_received, change, items }
+// 422 → { "message": "Insufficient stock for Burger Bun" }   (demand is summed across the cart)
 ```
 
-> Backend: atomic transaction → validates recipe ingredients → deducts stock → creates sale + sale_items + stock_movements.
+In one transaction: locks the ingredients, checks stock for the whole cart, records the
+sale with each item's food cost, decrements stock and writes `sale` stock movements.
 
-### GET `/sales` query params
-- `?from=2026-08-01&to=2026-08-31` — date range (UTC)
-- `?user_id=3` — filter by cashier
-- `?per_page=20` — pagination
+## Voids
 
----
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| POST | `/sales/{id}/void-requests` | `sales:void-request` | `{ reason }`. One pending request per sale. |
+| GET | `/void-requests?status=` | `sales:void-request \| sales:void-approve` | Requesters see only their own. |
+| POST | `/void-requests/{id}/approve` | `sales:void-approve` | `{ note? }` — returns exactly the stock the sale used and sets `sales.voided_at`. |
+| POST | `/void-requests/{id}/reject` | `sales:void-approve` | `{ note? }` |
 
-## Sale Voids (approval flow)
+Anyone with `sales:void-approve` may approve, including their own request. Reviewed
+requests are final. Voided sales are excluded from sales/profit reports and cash closing.
 
-| Method | Endpoint | Permission |
-|---|---|---|
-| POST | `/sales/{sale}/void-requests` | `sales:void-request` |
-| GET | `/void-requests?status=pending\|approved\|rejected` | `sales:void-request` or `sales:void-approve` (requesters see only their own) |
-| POST | `/void-requests/{id}/approve` | `sales:void-approve` |
-| POST | `/void-requests/{id}/reject` | `sales:void-approve` |
+## Cash closing
 
-- Request body: `{ "reason": "Wrong item" }`; review body: `{ "note": "optional" }`.
-- One pending request per sale; reviewed requests are final. Anyone with `sales:void-approve` may approve, including their own request (e.g. a user holding both cashier and manager roles).
-- Approve: in one transaction, returns exactly the stock the sale consumed (from its `source=sale` movements, as `source=void` movements) and sets `sales.voided_at`.
-- Voided sales are excluded from `/reports/daily` and `/reports/items`; `/reports/daily` adds `voided_count`, `voided_amount`; `/reports/receipts` flags `is_voided`; `/sales/{id}/receipt` adds `voided`; `/reports/stock-summary` adds `void_returns`.
-
-## Cash Closing (per cashier, per day)
-
-| Method | Endpoint | Permission |
-|---|---|---|
-| GET | `/cash-closing?date=YYYY-MM-DD` | `reports:view` or `cash:close` |
-| POST | `/cash-closing` | `cash:close` (manager, admin, super-admin) |
-
-- GET returns per-cashier live figures (`sales_count` = non-voided sales, `gross_amount`, `voided_count`, `voided_amount`, `expected_cash` = gross − voided, `pending_voids`), the recorded `closing` (or null), `changed_since_close`, and day `totals`.
-- POST body: `{ date, user_id, counted_cash, note? }`. Snapshots the figures and stores `variance = counted − expected` (negative = short). One closing per cashier per day, final once saved; refused while that cashier has pending void requests for the day; no future dates.
-
-## Receipt Settings
-
-| Method | Endpoint | Permission |
-|---|---|---|
-| GET | `/settings/receipt` | any signed-in user (needed to print) |
-| PUT | `/settings/receipt` | `settings:manage` |
-
-Fields: `canteen_name`, `branch_name`, `show_branch`, `header_lines` (≤3 lines), `footer_text`, `show_cashier`, `show_payment`, `paper_width` (`58`/`80`), `tear_feed_lines` (0–12). Defaults reproduce the original slip.
-
-## Manual Consumption
-
-| Method | Endpoint | Permission |
-|--------|----------|------------|
-| POST | `/consumptions` | `consumptions:create` |
-| GET | `/consumptions` | `consumptions:view` |
-
-```json
-// POST body
-{ "inventory_item_id": 1, "quantity": 5, "reason": "Staff meal" }
-```
-
----
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET | `/cash-closing?date=` | `reports:view \| cash:close` | Per cashier: `sales_count, gross_amount, voided_*, expected_cash` (cash only), `non_cash[]`, `pending_voids`, `closing`, `changed_since_close`; plus `totals` |
+| POST | `/cash-closing` | `cash:close` | `{ date, user_id, counted_cash, opening_float?, note? }` → `variance = counted − float − expected_cash`. One per cashier per day, final; refused while that cashier has pending voids; no future dates. |
 
 ## Reports
 
-| Method | Endpoint | Permission | Returns |
-|--------|----------|------------|---------|
-| GET | `/reports/daily` | `reports:view` | Daily sales summary |
-| GET | `/reports/items` | `reports:view` | Top-selling items |
-| GET | `/reports/stock` | `reports:view` | Current stock levels + value |
-| GET | `/reports/waste` | `reports:view` | Expired + manual consumption |
+All `reports:view`. Sales reports accept `user_id`, `payment_method` and (sales/items) `category_id`.
 
-```json
-// GET /reports/daily?date=2026-08-05
-{
-  "date": "2026-08-05",
-  "total_sales": 12500,
-  "total_transactions": 45,
-  "items_sold": 78
-}
+| Path | Params | Returns |
+|---|---|---|
+| `/reports/daily` | `date` | `total_sales, total_transactions, items_sold, voided_count, voided_amount, total_cost, gross_profit, uncosted_quantity, payments[], items[]` |
+| `/reports/receipts` | `date, status=valid\|voided` | receipts with items, cashier, payment label/reference, `is_voided` |
+| `/reports/items` | `from, to` | per item: quantity, revenue, cost, profit, margin |
+| `/reports/stock` | | current stock |
+| `/reports/stock-summary` | `from, to` | per item: opening, additions, sold, manual, expired, adjustments, void returns, closing, `avg_cost`, `closing_value` |
+| `/reports/ledger` | `inventory_item_id, from, to` | opening, closing and each movement with running balance |
+| `/reports/waste` | `from, to` | expiry write-offs and manual consumption, with value |
+| `/reports/cashiers` | | users who have made sales (for filters) |
 
-// GET /reports/stock
-[
-  { "id": 1, "name": "Bun", "current_stock": 48 }
-]
-```
+## Staff & permissions
 
----
-
-## Employees
-
-| Method | Endpoint | Permission |
-|--------|----------|------------|
-| GET | `/employees` | `employees:view` |
-| PUT | `/employees/{id}` | `employees:manage` |
-
-```json
-// PUT body
-{ "name": "New Name", "is_active": true }
-
-// Role change: use Spatie directly
-// POST /employees/{id}/role
-{ "role": "cashier" }
-```
-
----
-
-### Employee accounts
-
-| Method | Endpoint | Permission | Notes |
+| Method | Path | Permission | Notes |
 |---|---|---|---|
+| GET | `/employees` | `employees:view` | Users with roles |
 | POST | `/employees` | `employees:edit` | `{ name, email, password (min 8), roles: [...] }` |
-| PUT | `/employees/{id}/password` | `employees:edit` | `{ password }` — signs the user out everywhere; not for own account |
-| POST | `/employees/{id}/role` | `employees:edit` | `{ roles: [...] }` (multiple roles allowed; legacy `{ role }` still accepted) |
-| PUT | `/me/password` | any signed-in user | `{ current_password, password, password_confirmation }` — other sessions signed out |
+| PUT | `/employees/{id}` | `employees:edit` | `{ name?, is_active? }` — deactivating signs them out; not for your own account |
+| PUT | `/employees/{id}/password` | `employees:edit` | `{ password }` — signs them out everywhere |
+| POST | `/employees/{id}/role` | `employees:edit` | `{ roles: [...] }` (legacy `{ role }` accepted) |
+| GET | `/permissions` | `employees:edit` | Roles with permissions + all permissions |
+| PUT | `/permissions/{role}` | `employees:edit` | `{ permissions: [...] }`; super-admin can't be edited |
 
 Only a super-admin can grant `super-admin` or modify a super-admin account.
 
-## Permissions Summary
+## Settings & activity
 
-| Permission | Roles |
-|------------|-------|
-| `pos:use` | super-admin, admin, manager, cashier, employee |
-| `menu:view` | all |
-| `menu:create` | super-admin, admin |
-| `menu:edit` | super-admin, admin, manager |
-| `menu:delete` | super-admin, admin |
-| `inventory:view` | super-admin, admin, manager |
-| `inventory:create` | super-admin, admin, manager |
-| `inventory:edit` | super-admin, admin |
-| `recipes:manage` | super-admin, admin |
-| `sales:create` | super-admin, admin, manager, cashier, employee |
-| `sales:view` | super-admin, admin, manager, cashier, employee |
-| `consumptions:create` | super-admin, admin, manager, employee |
-| `consumptions:view` | super-admin, admin, manager, employee |
-| `reports:view` | super-admin, admin, manager |
-| `employees:view` | super-admin, admin, manager |
-| `employees:edit` | super-admin, admin |
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET | `/settings/receipt` | signed in | `canteen_name, branch_name, show_branch, header_lines, footer_text, show_cashier, show_payment, paper_width (58\|80), text_size (large\|compact), tear_feed_lines` |
+| PUT | `/settings/receipt` | `settings:manage` | same fields |
+| GET | `/settings/pos` | signed in | `payment_methods` (enabled) + `available_payment_methods` |
+| PUT | `/settings/pos` | `settings:manage` | `{ payment_methods: [...] }` (at least one) |
+| GET | `/activity` | `activity:view` | `?user_id&action&from&to&search&per_page` (paginated); `action=menu` matches `menu.*` |
+| GET | `/activity/actions` | `activity:view` | distinct action names |
 
----
+## Permissions
 
-## Permissions Management
+`pos:use` · `categories:view|create|edit|delete` · `menu:view|create|edit|delete` ·
+`recipes:manage` · `inventory:view|create|edit` · `sales:create|view|void-request|void-approve` ·
+`consumptions:create|view` · `reports:view` · `cash:close` · `employees:view|edit` ·
+`settings:manage` · `activity:view`
 
-| Method | Endpoint | Permission |
-|--------|----------|------------|
-| GET | `/permissions` | `employees:edit` |
-| PUT | `/permissions/{role}` | `employees:edit` |
-
-```json
-// GET /permissions response
-{
-  "roles": [
-    { "id": 1, "name": "admin", "permissions": [{ "id": 1, "name": "pos:use" }, ...] }
-  ],
-  "permissions": [
-    { "id": 1, "name": "pos:use" },
-    { "id": 2, "name": "menu:view" },
-    ...
-  ]
-}
-
-// PUT /permissions/{role} body
-{ "permissions": ["pos:use", "menu:view", "sales:create"] }
-```
+Default role assignments are in [README.md](README.md#roles-defaults--editable-on-the-permissions-page).
+New permissions reach existing roles through a migration (see [CONVENTIONS.md](CONVENTIONS.md#permissions)).

@@ -1,165 +1,103 @@
-# Canteen Management System
+# Canteen POS & Inventory
 
-POS + inventory management system for canteens and small food operations. Recipe-based stock consumption, role-based access, thermal receipt printing.
+Point-of-sale and stock control for a staff canteen. Cashiers sell from a phone or
+PC, ingredients are deducted by recipe, receipts print on an 80 mm thermal printer,
+and managers get costs, profit, cash closing, voids and an audit trail.
 
-## Tech Stack
+## Features
+
+| Area | What it does |
+|---|---|
+| **POS** | Phone-first item grid, cart, cash (quick amounts + change) or card / JazzCash / Easypaisa / bank transfer with reference. Stock checked against recipes before every sale. |
+| **Receipts** | ESC/POS over USB or Bluetooth (Chrome/Edge, HTTPS). Customer + Accounts copy, tear-off or auto-cut, reprints marked DUPLICATE, voided sales marked VOID. Layout editable in Settings with an exact preview. |
+| **Recipes & stock** | Menu items consume inventory by recipe (burger = bun + fillet). Stock-in with cost, expiry and bill no.; adjustments, expiry write-offs, manual consumption (staff meals, damage). |
+| **Costs & profit** | Weighted-average ingredient cost; food cost and margin per menu item; each sale snapshots its cost so profit history doesn't change when prices do. |
+| **Alerts** | Per-item reorder level (low stock), expiring within 7 days, out of stock. |
+| **Voids** | Cashier requests a void with a reason → manager approves (stock returned, sale excluded from takings) or rejects. |
+| **Cash closing** | Per cashier per day: opening float, cash sales, card/wallet takings, counted cash → shortage/excess, printable closing slip with signature lines. |
+| **Dashboard** | Today vs yesterday, 30-day sales & profit, sales by hour, payment mix, top items, attention list. |
+| **Reports** | Sales, receipts, items & profit, stock summary (with value), stock ledger, waste — filters (date presets, cashier, payment, category) and Excel / PDF export. |
+| **Staff & access** | Users with one or more roles; permissions editable per role; admins add users and reset passwords; everyone can change their own password. |
+| **Activity log** | Who changed prices, recipes, stock, staff, permissions, settings, voids, closings, and sign-ins — with before → after. |
+
+## Roles (defaults — editable on the Permissions page)
+
+| Role | Can |
+|---|---|
+| **super-admin** | Everything; only a super-admin can grant super-admin or edit a super-admin |
+| **admin** | Everything except managing super-admins: menu, stock, staff, settings, activity log |
+| **manager** | POS, approve voids, cash closing, reports & dashboard, stock-in, edit menu |
+| **cashier** | POS, request voids |
+| **employee** | POS, request voids, record manual consumption |
+
+A user can hold several roles (e.g. cashier + manager); permissions combine.
+
+## Tech stack
 
 | Layer | Stack |
-|-------|-------|
-| Backend | Laravel 13, PHP 8.4, Sanctum 4, Spatie Permission 8 |
-| Frontend | React 19, Vite 8, TypeScript, TailwindCSS 4, shadcn/ui (base-mira, phosphor icons) |
-| Database | SQLite (local dev), MySQL 8.4 (Docker/production) |
-| Auth | Laravel Sanctum tokens + Spatie roles/permissions |
+|---|---|
+| Backend | Laravel 13 (PHP 8.4, Octane/FrankenPHP in Docker), Sanctum tokens, Spatie Permission |
+| Frontend | React 19, Vite 8, TypeScript, Tailwind 4, shadcn/ui (base-mira, Phosphor icons), Recharts |
+| Database | MySQL 8 (native on the VM, reached via its socket); SQLite for local dev and tests |
+| Printing | ESC/POS generated in the browser, sent over Web Serial (USB) or Web Bluetooth (BLE) |
 
-## Quick Start — Local Dev
+## Local development
 
 ```bash
-# Backend
+# Backend — http://localhost:8000
 cd api
 composer install
-cp .env.example .env
-php artisan key:generate
-php artisan migrate --seed     # seeds roles/permissions + demo data
-composer dev                   # starts artisan serve + queue + vite
+cp .env.example .env && php artisan key:generate
+php artisan migrate --seed        # roles/permissions + demo data (admin@canteen.com / password)
+php artisan serve
 
-# Frontend (separate terminal)
+# Frontend — http://localhost:5173 (separate terminal)
 cd frontend
 npm install
-npm run dev                    # Vite dev server at :5173
+npm run dev
 ```
 
-Backend runs at `http://localhost:8000`, frontend at `http://localhost:5173`.
+## Production (Docker)
 
-## Quick Start — Docker
+Two containers — `api` and `nginx` — behind Nginx Proxy Manager; the database is the
+VM's native MySQL. Migrations run when the `api` container starts.
 
 ```bash
-cp .env.docker .env.docker.local
-# Edit .env.docker.local with your values (APP_KEY, DB credentials, etc.)
-
+cp .env.docker .env.docker.local      # fill in; never commit it
 docker compose --env-file .env.docker.local up -d --build
 ```
 
-This starts 5 containers: `api`, `queue`, `scheduler`, `db` (MySQL), `nginx` (port 9090).
+Everything else — first install, moving data from the old bundled MySQL container,
+updates, nightly backups, troubleshooting — is in **[DEPLOYMENT.md](DEPLOYMENT.md)**.
 
-Migrations and role seeding run automatically via the entrypoint. The app is available at `http://localhost:9090`.
+> **Printing needs HTTPS** (or `localhost`) and Chrome/Edge. Phones can only print over
+> Bluetooth **Low Energy**; a printer that only speaks classic Bluetooth can't be reached
+> from a browser.
 
-### Create Super Admin
-
-```bash
-docker compose exec api php artisan tinker
-```
-
-```php
-App\Models\User::create([
-    'name' => 'Admin',
-    'email' => 'admin@example.com',
-    'password' => bcrypt('password'),
-    'is_active' => true,
-])->assignRole('super-admin');
-exit;
-```
-
-## Production Deploy
+## Tests & checks
 
 ```bash
-docker compose --env-file .env.docker.local up -d --build
-docker compose exec api php artisan migrate --force
-docker compose exec api php artisan config:cache
-docker compose exec api php artisan route:cache
+cd api && php artisan test          # 120 feature tests (SQLite in-memory)
+cd frontend && npm run lint         # oxlint
+cd frontend && npm run build        # type-check + production build
 ```
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for full Docker and manual deployment instructions, backups, and troubleshooting.
-
-## Project Structure
+## Repository layout
 
 ```
-mess_soft/
-├── api/                     # Laravel backend
-│   ├── app/
-│   │   ├── Http/Controllers/Api/   # 10 controllers
-│   │   ├── Models/                 # 9 models
-│   │   └── Services/
-│   ├── database/
-│   │   ├── migrations/     # 18 migrations
-│   │   └── seeders/        # RolesAndPermissionSeeder + DemoDataSeeder
-│   ├── routes/api.php      # /api/v1 routes with permission middleware
-│   └── tests/              # 60 tests (SQLite in-memory)
-├── frontend/                # Standalone Vite app
-│   ├── src/
-│   │   ├── pages/          # 9 pages (Login, POS, Menu, Inventory, Reports, etc.)
-│   │   ├── components/     # 14 shared components + 60+ shadcn/ui
-│   │   ├── contexts/       # AuthContext, ThemeContext
-│   │   ├── services/       # api.ts (Axios + interceptors)
-│   │   └── lib/            # utils, format, toast
-│   └── dist/               # Production build output
-├── docker/                  # Docker configs (nginx, php-fpm)
-├── docker-compose.yml
-└── docs/                    # PLAN.md, SCHEMA.md, API.md, etc.
-```
-
-## Key Features
-
-- **POS** — Add items to cart, validate stock via recipes, process sales, print thermal receipts
-- **Recipe System** — Menu items linked to inventory items (e.g., burger = bun + patty); stock auto-deducted on sale
-- **Inventory Management** — Track stock levels, record purchases, manual consumption, expired items
-- **Role-Based Access** — 5 roles (super-admin, admin, manager, cashier, employee) with granular permissions
-- **Category Management** — Create/edit/delete menu categories
-- **Reports** — Daily/weekly/monthly sales, low stock alerts, top selling items
-- **Receipt Printing** — ESC/POS thermal printer over USB or Bluetooth (auto-reconnect)
-
-## API Overview
-
-All endpoints under `/api/v1` with Sanctum bearer token auth.
-
-| Resource | Endpoints | Permissions |
-|----------|-----------|-------------|
-| Auth | `POST /login`, `POST /logout`, `GET /me` | public, auth, auth |
-| Categories | CRUD `/categories` | `categories:*` |
-| Menu Items | CRUD `/menu` | `menu:*` |
-| Inventory | CRUD `/inventory` | `inventory:*` |
-| Sales | `POST /sales`, `GET /sales` | `sales:create`, `sales:view` |
-| Consumption | CRUD `/consumption` | `consumption:*` |
-| Reports | `/reports/dashboard`, `/reports/sales` | `reports:view` |
-| Employees | CRUD `/employees` | `employees:*` |
-| Permissions | `/permissions`, `/roles` | `permissions:manage` |
-
-See [API.md](API.md) for full request/response examples.
-
-## Testing & Linting
-
-```bash
-# Backend tests (60 tests, SQLite in-memory)
-cd api && php artisan test
-
-# Frontend lint (oxlint)
-cd frontend && npm run lint
-
-# Frontend build
-cd frontend && npm run build   # tsc -b && vite build
-```
-
-## Common Commands
-
-```bash
-# Docker
-docker compose logs -f                         # tail all logs
-docker compose exec api php artisan <cmd>      # run artisan
-docker compose restart api                     # restart API
-docker compose up -d --build api               # rebuild API only
-docker compose down -v                         # stop + remove volumes
-
-# Database reset
-cd api && php artisan migrate:fresh --seed
+api/                 Laravel API (controllers, models, migrations, seeders, tests)
+frontend/            React SPA (pages, components, ESC/POS encoder + preview)
+docker/              nginx image (serves the SPA, proxies /api)
+deploy/backup.sh     nightly backup script for the VM
+docker-compose.yml   api + nginx
 ```
 
 ## Documentation
 
-| File | Description |
-|------|-------------|
-| [PLAN.md](PLAN.md) | Full implementation plan (schema, roles, API design) |
-| [SCHEMA.md](SCHEMA.md) | Database quick reference |
-| [API.md](API.md) | API quick reference |
-| [PHASES.md](PHASES.md) | Build checklist |
-| [CONVENTIONS.md](CONVENTIONS.md) | Code style + templates |
-| [DEPLOYMENT.md](DEPLOYMENT.md) | Production deployment guide |
-| [AGENTS.md](AGENTS.md) | AI agent context file |
+| File | For |
+|---|---|
+| [DEPLOYMENT.md](DEPLOYMENT.md) | Installing, updating, backing up and troubleshooting production |
+| [API.md](API.md) | Every endpoint, its permission and payload |
+| [SCHEMA.md](SCHEMA.md) | Tables, columns and foreign-key rules |
+| [CONVENTIONS.md](CONVENTIONS.md) | How code is written here (backend, frontend, printing, tests) |
+| [AGENTS.md](AGENTS.md) | Context for AI coding assistants |

@@ -1,122 +1,76 @@
-# mess_soft — Canteen Management System
+# mess_soft — Canteen POS & Inventory
 
-## Status
-Fully built POS + inventory app. Two separate apps with custom code throughout:
-- `api/` — Laravel 13 backend: 9 models, 10 API controllers, full route tree, seeders
-- `frontend/` — React 19 SPA: 9 pages, 60+ shadcn/ui components, auth flow, lazy-loaded routes
+Context for AI coding assistants. Read [CONVENTIONS.md](CONVENTIONS.md) before changing
+code; [API.md](API.md) and [SCHEMA.md](SCHEMA.md) are the references.
 
-Key features: recipe-based stock consumption (burger = bun + patty), manual consumption tracking, expired items, sale reports, thermal receipt printing (ESC/POS over USB/Bluetooth).
+## Production is live
 
-## Tech Stack
-- **Backend:** Laravel 13, PHP 8.3+, Sanctum 4, Spatie Permission 8
-- **Frontend:** React 19, Vite 8, TypeScript 6, TailwindCSS 4, shadcn/ui (base-mira style, phosphor icons), Axios, oxlint
-- **Database:** SQLite for local dev (`api/.env`: `DB_CONNECTION=sqlite`); in Docker/prod the VM's **native MySQL**, reached via its unix socket mounted into the api container (no db container)
-- **Auth:** Laravel Sanctum tokens + Spatie roles/permissions (roles: super-admin, admin, manager, cashier, employee)
+A VM runs this with real sales data. Changes must be safe to deploy on top of it:
+- Migrations: reversible, additive, backfill in the migration; verify up/down/up on **MySQL**.
+- New permissions need a **migration** that grants them to existing roles (the seeder
+  only seeds roles that don't exist yet).
+- Say so explicitly if a change is breaking or needs a manual step on the VM.
+- `.env.docker.local` holds real secrets and is gitignored — never commit it.
 
-## Project Layout
+## Layout
+
 ```
-mess_soft/
-├── api/                     # Laravel app
-│   ├── app/
-│   │   ├── Http/Controllers/Api/   # 10 controllers (Auth, Category, MenuItem, Recipe, Inventory, Sale, ManualConsumption, Report, Employee, Permission)
-│   │   ├── Models/                 # 9 models (User, Category, MenuItem, InventoryItem, Recipe, Sale, SaleItem, StockMovement, ManualConsumption)
-│   │   └── Services/
-│   ├── database/
-│   │   ├── migrations/     # 18 migration files
-│   │   └── seeders/        # DatabaseSeeder calls RolesAndPermissionSeeder + DemoDataSeeder
-│   ├── routes/api.php      # Full route tree under /api/v1 with permission middleware
-│   ├── phpunit.xml         # SQLite in-memory for tests
-│   └── .env                # DB_CONNECTION=sqlite, SESSION_DRIVER=database
-├── frontend/                # Standalone Vite app (NOT in Laravel resources/)
-│   ├── src/
-│   │   ├── pages/          # 9 pages (Login, POS, Menu, Inventory, Reports, Consumption, Employees, Permissions, NotFound)
-│   │   ├── components/     # 14 shared components + ui/ (60+ shadcn components)
-│   │   ├── contexts/       # AuthContext, ThemeContext
-│   │   ├── hooks/          # use-mobile, useKeyboardShortcuts
-│   │   ├── services/       # api.ts (Axios instance + interceptors)
-│   │   ├── lib/            # utils, format, toast
-│   │   └── App.tsx         # react-router with lazy-loaded routes + ProtectedRoute
-│   ├── components.json     # shadcn config (base-mira style, phosphor icons)
-│   ├── .oxlintrc.json      # react/hooks + only-export-components rules
-│   └── vite.config.ts      # react() + tailwindcss() plugins, @ alias → ./src
-├── PLAN.md                 # Full implementation plan (source of truth for schema, roles, API design)
-├── SCHEMA.md               # DB quick reference
-├── API.md                  # API quick reference
-├── PHASES.md               # Build checklist
-├── CONVENTIONS.md          # Code style + templates
-├── DEPLOYMENT.md           # Production deployment guide (Docker + manual)
-├── docker-compose.yml      # Docker stack: api + nginx (MySQL is native on the VM, via socket)
-├── .env.docker             # Docker environment template
-└── docker/                 # Docker configs
-    ├── Dockerfile.nginx    # Multi-stage: builds frontend + serves via Nginx
-    ├── nginx.conf          # Nginx config (SPA + API proxy)
-    └── php-fpm.conf        # PHP-FPM pool config
+api/                         Laravel 13 (PHP 8.4)
+  app/Http/Controllers/Api/  15 controllers (Auth, Category, MenuItem, Recipe, Inventory,
+                             ManualConsumption, Sale, VoidRequest, CashClosing, Report,
+                             Dashboard, Employee, Permission, Setting, ActivityLog)
+  app/Models/                13 models
+  app/Support/               Activity (audit log), PaymentMethods
+  database/migrations/       27 migrations
+  database/seeders/          RolesAndPermissionSeeder (idempotent), DemoDataSeeder (skips production)
+  routes/api.php             /api/v1, `permission:` middleware per route
+  tests/Feature/             120 tests (SQLite in-memory)
+frontend/                    React 19 + Vite 8 + TS + Tailwind 4 + shadcn/ui (base-mira, Phosphor icons)
+  src/pages/                 14 pages (Dashboard, POS, Menu, Inventory, Reports, CashClosing, Voids,
+                             Consumption, ReceiptDesign = Settings, Employees, Permissions, Activity, Login, NotFound)
+  src/lib/navigation.ts      single list of pages → sidebar, phone tab bar, route guards
+  src/lib/escpos.ts          receipt / closing-slip ESC/POS encoder
+  src/lib/escposPreview.ts   reads those bytes back for previews
+  src/lib/exporters.ts       Excel / PDF export (lazy-loaded)
+  src/services/printer.ts    USB (Web Serial) / Bluetooth (Web Bluetooth) printer, auto-reconnect
+docker/                      nginx image (builds the SPA, proxies /api)
+deploy/backup.sh             nightly backup for the VM
+docker-compose.yml           api + nginx only; MySQL is native on the VM (socket mount)
 ```
 
-## Dev Commands
+## Commands
+
 ```bash
-# Setup (from api/)
-composer install
-cp .env.example .env
-php artisan key:generate
-php artisan migrate --seed     # Seeds roles/permissions + demo data
-
-# Run everything (from api/ — single command)
-composer dev             # concurrently: artisan serve + queue:listen + pail + npm run dev (vite for backend assets)
-
-# Run separately:
-cd api && php artisan serve          # backend at :8000
-cd frontend && npm run dev           # frontend at :5173
-
-# Testing
-cd api && php artisan test          # PHPUnit, SQLite in-memory
-
-# Linting
-cd frontend && npm run lint         # oxlint (no eslint)
-
-# Build
-cd frontend && npm run build        # tsc -b && vite build
-
-# Reset DB
-cd api && php artisan migrate:fresh --seed
-
-# Docker (production)
-docker compose --env-file .env.docker.local up -d --build   # build + start all
-docker compose logs -f                                      # tail logs
-docker compose exec api php artisan <cmd>                   # run artisan
-docker compose restart api                                  # restart API
-docker compose up -d --build api                            # rebuild API only
+cd api && php artisan test            # backend tests
+cd api && vendor/bin/pint <files>     # format PHP (only files you changed)
+cd frontend && npm run lint           # oxlint
+cd frontend && npm run build          # tsc -b && vite build
+cd api && php artisan migrate:fresh --seed   # reset local SQLite (demo admin: admin@canteen.com / password)
 ```
 
-## Key Architecture Notes
-- Frontend is a **separate Vite app** in `frontend/`, not in Laravel's `resources/`
-- Frontend uses **Axios** (`frontend/src/services/api.ts`) with Bearer token auth and 401 redirect; `VITE_API_URL` env var overrides default `http://localhost:8000/api/v1`
-- `composer dev` runs from `api/` and starts backend vite (laravel-vite-plugin) — frontend at `:5173` must be started separately
-- User model already has `HasApiTokens` + `HasRoles` traits — use these, don't re-add
-- Tests use SQLite in-memory (`phpunit.xml` sets `DB_CONNECTION=sqlite`, `DB_DATABASE=:memory:`)
-- oxlint config at `frontend/.oxlintrc.json` — React hooks rules + export warnings enabled
-- Frontend uses `@` path alias → `./src` (configured in both `vite.config.ts` and `tsconfig.app.json`)
-- Routes in `api.php` use Spatie `permission:` middleware (e.g., `permission:menu:view`, `permission:sales:create`)
-- Nav items in Layout.tsx filter by user permissions via `hasPermission()`
-- All pages are lazy-loaded via `React.lazy()` with `<Suspense>` fallbacks
-- shadcn/ui style is **base-mira** with **phosphor** icon library (not lucide)
+Local dev: `php artisan serve` (:8000) and `npm run dev` (:5173). Docker/prod: see DEPLOYMENT.md.
 
-## Docs
-- **PLAN.md** — full implementation plan (source of truth for schema, roles, API design)
-- **SCHEMA.md** — DB quick reference
-- **API.md** — API quick reference
-- **PHASES.md** — build checklist
-- **CONVENTIONS.md** — code style + templates (Laravel + React + shadcn/ui)
-- **DEPLOYMENT.md** — production deployment guide (Docker + manual)
+## Domain rules
 
-## Conventions
-- All monetary values in **PKR** (integer); receipts show `Rs.XXX`
-- API endpoints under `/api/v1/` with Sanctum auth
-- Sanctum auth uses bearer tokens; `Auth::attempt()` validates via the default `web` guard, `auth:sanctum` middleware resolves tokens — no `api` guard exists
-- Migrations must be reversible
-- Error responses: `{ "message": "...", "errors": {...} }`
-- `APP_TIMEZONE=Asia/Karachi` — all timestamps stored and displayed in Pakistan time (no UTC conversion). Backend `->timezone('Asia/Karachi')` calls are no-ops. Frontend `parseLocal()` reinterprets ISO strings as local time.
-- Soft deletes on menu items (`is_active = false`, never hard delete)
-- Use `lockForUpdate()` in DB transactions for stock validation
-- Recipe system: menu items link to inventory items via `recipes` table (quantity per ingredient)
-- Stock validation checks all recipe ingredients before allowing a sale
+- **Money** is integer PKR; receipts show `Rs.1,234`. Costs per unit are decimals.
+- **Timezone** `Asia/Karachi`, stored as local time (no UTC). Frontend `parseLocal()` treats ISO strings as local.
+- **Recipes:** a sale decrements every ingredient (`recipe.quantity × qty`); stock is checked for the whole cart under `lockForUpdate()` before any write.
+- **Costs:** inventory keeps a weighted-average `avg_cost`; each `sale_items.unit_cost` snapshots food cost at sale time.
+- **Every stock change** writes a `stock_movements` row (`source`: stock-in · sale · manual · adjustment · expiry · void).
+- **Voids:** request (reason) → approve/reject by `sales:void-approve` (self-approval allowed). Approval reverses the sale's exact movements and sets `sales.voided_at`; voided sales are excluded from takings.
+- **Payments:** cash · card · jazzcash · easypaisa · bank_transfer, enabled in Settings. Only cash counts toward the drawer.
+- **Cash closing:** per cashier per day; `variance = counted − opening_float − cash sales`; final once saved; blocked while that cashier has pending voids.
+- **History is never deleted:** menu items are deactivated; history foreign keys are `RESTRICT`.
+- **Roles:** super-admin, admin, manager, cashier (= "registration staff"), employee. Users can hold several roles. Only a super-admin can grant super-admin or edit one.
+- **Audit:** sensitive changes go through `Activity::log()`.
+
+## Gotchas
+
+- Auth: Sanctum bearer tokens; `Auth::attempt()` uses the `web` guard, routes use `auth:sanctum`. There is no `api` guard.
+- Tests that act as several users must call `$this->app['auth']->forgetGuards()` between them.
+- MySQL returns `SUM()` as a string — cast before returning JSON.
+- Closures in `DB::transaction(...)` must `use` every outer variable.
+- Only the `api` container migrates (`RUN_MIGRATIONS`); don't add services that run the entrypoint's migrate step.
+- Receipt text must never be truncated — use `twoColumns()` in `escpos.ts`.
+- Browser printing needs HTTPS + Chrome/Edge; phones print over Bluetooth Low Energy only.
+- The canteen's printer: **Speed-X BT600M**, 80 mm, Bluetooth + USB. Defaults: 80 mm, large text (Font A, 48 columns), tear-off (no auto-cut).
