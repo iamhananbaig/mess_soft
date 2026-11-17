@@ -73,4 +73,4 @@ Local dev: `php artisan serve` (:8000) and `npm run dev` (:5173). Docker/prod: s
 - Only the `api` container migrates (`RUN_MIGRATIONS`); don't add services that run the entrypoint's migrate step.
 - Receipt text must never be truncated — use `twoColumns()` in `escpos.ts`.
 - Browser printing needs HTTPS + Chrome/Edge; phones print over Bluetooth Low Energy only.
-- The canteen's printer: **Speed-X BT600M**, 80 mm, Bluetooth + USB. Defaults: 80 mm, large text (Font A), 64 mm print area (512 dots; 72 mm crashed it after one line — widen via Settings → Print area width), tear-off (no auto-cut). Never send a line that exactly fills the print area (`columnsFor()`).
+- The canteen's printer: **Speed-X BT600M**, 80 mm, Bluetooth + USB. It is the battery/portable model (90 mm/s). Tested working: 80 mm, **compact, 66 mm print area** (58 columns); wider, or large text above 64 mm, makes it print a line and hang until power-cycled. Tear-off (no auto-cut). Never send a line that exactly fills the print area (`columnsFor()`). Print darkness is a printer setting (Windows `Printer.exe` → Printing Density), not an ESC/POS command.
