@@ -85,8 +85,17 @@ Docker volume `mess-soft_mysql-data`. The stack now uses the VM's native MySQL, 
 must be copied across **once**. Do this outside canteen hours. Nothing is deleted: the old
 container and volume stay until you remove them yourself.
 
+> **`.env.docker.local` is no longer in git** (it held real secrets). Pulling this version
+> **deletes it from the VM's checkout**, so copy it out first and put it back after the pull.
+> Because the old file was public in git history, use **new** values: a new `DB_PASSWORD` for
+> the native MySQL user, and a new `APP_KEY` (`docker compose run --rm api php artisan key:generate --show`;
+> safe here — logins use API tokens, which don't depend on the key).
+
 ```bash
 cd /opt/mess_soft                      # wherever the repo lives on the VM
+
+# -1. Keep the env file safe from `git pull`
+cp .env.docker.local ~/mess_soft.env.docker.local.bak
 
 # 0. Stop new sales while copying (keeps the old db container running)
 docker compose stop nginx api
@@ -107,6 +116,7 @@ mysql -u root -p -N -e "select count(*) from sales; select count(*) from users; 
 # 4. Update .env.docker.local: MYSQL_SOCKET_DIR, DB_SOCKET, DB_HOST=localhost, DB_PASSWORD,
 #    QUEUE_CONNECTION=sync, RUN_MIGRATIONS=true (see section 2). Then deploy the new stack:
 git pull
+[ -f .env.docker.local ] || cp ~/mess_soft.env.docker.local.bak .env.docker.local   # restore, then edit
 docker compose --env-file .env.docker.local up -d --build --remove-orphans
 docker compose logs api | tail -30     # "MySQL is ready", migrations, then Octane started
 
