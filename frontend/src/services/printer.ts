@@ -19,10 +19,17 @@ const BLE_PRINTER_SERVICES = [
 const DEFAULT_BLE_WRITE_CHUNK_SIZE = 20;
 
 /**
- * Pause between write-without-response chunks. Without it, cheap BLE
- * printers overflow their buffer and drop data (cut-off or blank slips).
+ * Pacing for printers that only offer write-without-response (no flow control).
+ * Cheap BLE printers have a small receive buffer; flooding it makes the firmware
+ * lock up until it is power-cycled. So: a pause after every chunk, plus a longer
+ * pause every BLE_BURST_BYTES so the print head can drain the buffer.
  */
-const BLE_CHUNK_DELAY_MS = 8;
+const BLE_CHUNK_DELAY_MS = 20;
+const BLE_BURST_BYTES = 512;
+const BLE_BURST_PAUSE_MS = 150;
+
+/** Retries for a single chunk whose GATT write failed transiently ("operation in progress"). */
+const BLE_CHUNK_RETRIES = 2;
 
 /** Attempts to re-establish a dropped BLE link before giving up. */
 const BLE_AUTO_RECONNECT_ATTEMPTS = 3;
@@ -58,6 +65,8 @@ class PrinterService {
   private listeners = new Set<() => void>();
   private reconnecting: Promise<boolean> | null = null;
   private manualDisconnect = false;
+  /** Devices that already have our disconnect handler (avoid stacking duplicates). */
+  private watchedDevices = new WeakSet<BluetoothDevice>();
 
   constructor() {
     this.loadConfig();
@@ -202,6 +211,8 @@ class PrinterService {
 
   /** Register the BLE disconnect handler that preserves config for reconnect. */
   private registerBleDisconnectHandler(device: BluetoothDevice) {
+    if (this.watchedDevices.has(device)) return;
+    this.watchedDevices.add(device);
     device.addEventListener('gattserverdisconnected', () => {
       // Clear the characteristic only — keep the device and config so we can
       // reconnect without the user having to pick the printer again.
@@ -424,14 +435,53 @@ class PrinterService {
     if (!this.bluetoothCharacteristic) throw new Error('Printer not connected');
 
     const characteristic = this.bluetoothCharacteristic;
+    // Prefer acknowledged writes: each chunk waits for the printer to accept it,
+    // which is real flow control and keeps the printer's buffer from overflowing.
+    const acknowledged = !!characteristic.properties.write;
 
-    for (let i = 0; i < data.length; i += DEFAULT_BLE_WRITE_CHUNK_SIZE) {
-      const chunk = data.slice(i, i + DEFAULT_BLE_WRITE_CHUNK_SIZE);
-      if (characteristic.properties.writeWithoutResponse) {
-        await characteristic.writeValueWithoutResponse(chunk);
-        await sleep(BLE_CHUNK_DELAY_MS);
-      } else {
-        await characteristic.writeValueWithResponse(chunk);
+    try {
+      let sinceBurst = 0;
+      for (let i = 0; i < data.length; i += DEFAULT_BLE_WRITE_CHUNK_SIZE) {
+        const chunk = data.slice(i, i + DEFAULT_BLE_WRITE_CHUNK_SIZE);
+        await this.writeBleChunk(characteristic, chunk, acknowledged);
+
+        if (!acknowledged) {
+          sinceBurst += chunk.length;
+          if (sinceBurst >= BLE_BURST_BYTES) {
+            sinceBurst = 0;
+            await sleep(BLE_BURST_PAUSE_MS);
+          } else {
+            await sleep(BLE_CHUNK_DELAY_MS);
+          }
+        }
+      }
+    } catch (err) {
+      // Drop the link so the next print starts on a fresh GATT connection
+      // instead of a half-broken one (auto-reconnect kicks in from the handler).
+      this.bluetoothCharacteristic = null;
+      if (this.bluetoothDevice?.gatt?.connected) this.bluetoothDevice.gatt.disconnect();
+      this.notify();
+      throw err;
+    }
+  }
+
+  private async writeBleChunk(
+    characteristic: BluetoothRemoteGATTCharacteristic,
+    chunk: Uint8Array<ArrayBuffer>,
+    acknowledged: boolean,
+  ) {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        if (acknowledged) {
+          await characteristic.writeValueWithResponse(chunk);
+        } else {
+          await characteristic.writeValueWithoutResponse(chunk);
+        }
+        return;
+      } catch (err) {
+        // A rejected GATT write was not delivered, so resending the same chunk can't duplicate output.
+        if (attempt >= BLE_CHUNK_RETRIES || !this.bluetoothDevice?.gatt?.connected) throw err;
+        await sleep(100 * (attempt + 1));
       }
     }
   }

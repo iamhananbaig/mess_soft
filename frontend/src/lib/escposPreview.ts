@@ -70,6 +70,7 @@ export function interpretEscPos(data: Uint8Array): SlipPreviewModel {
       i += 1;
       continue;
     }
+    if (b === 0x1c) { flushText(); i += 1; continue; } // FS x (e.g. FS . cancel Chinese mode) — no visual effect
     if (b === 0x1d) {
       const cmd = data[i + 1];
       flushText();

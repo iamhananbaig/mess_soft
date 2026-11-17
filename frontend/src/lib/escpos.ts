@@ -48,8 +48,23 @@ function concat(...arrays: Uint8Array[]): Uint8Array {
   return result;
 }
 
+/** Common typographic characters → plain ASCII equivalents. */
+const ASCII_REPLACEMENTS: Record<string, string> = {
+  '\u2018': "'", '\u2019': "'", '\u201C': '"', '\u201D': '"',
+  '\u2013': '-', '\u2014': '-', '\u2022': '*', '\u00B7': '.',
+  '\u00D7': 'x', '\u2026': '...', '\u00A0': ' ', '\u20A8': 'Rs',
+};
+
+/**
+ * Printable ASCII only. The printer's firmware starts in Chinese double-byte
+ * mode, where any byte >= 0x80 swallows the byte after it — which can be part
+ * of the next ESC/POS command and leave the printer in a broken state.
+ */
 function text(str: string): Uint8Array {
-  return TEXT_ENCODER.encode(str);
+  const ascii = str
+    .normalize('NFKD')
+    .replace(/[\u0080-\u{10FFFF}]/gu, (ch) => ASCII_REPLACEMENTS[ch] ?? (/\p{M}/u.test(ch) ? '' : '?'));
+  return TEXT_ENCODER.encode(ascii);
 }
 
 function bytes(...values: number[]): Uint8Array {
@@ -59,7 +74,8 @@ function bytes(...values: number[]): Uint8Array {
 // ── ESC/POS commands ─────────────────────────────────────────────────
 
 export function initialize(): Uint8Array {
-  return bytes(0x1b, 0x40); // ESC @
+  // ESC @ resets the mode; FS . cancels Chinese (double-byte) character mode.
+  return bytes(0x1b, 0x40, 0x1c, 0x2e);
 }
 
 export function selectFontA(): Uint8Array {
