@@ -385,8 +385,6 @@ export function encodeReceipt(data: ReceiptData, options: EncodeReceiptOptions):
 
   // Footer
   if (settings.footer_text) {
-    parts.push(rule('-'));
-    parts.push(feedLines(1));
     parts.push(align('center'));
     parts.push(bold(true));
     parts.push(text(settings.footer_text + '\n'));
