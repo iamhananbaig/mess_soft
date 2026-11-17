@@ -41,6 +41,7 @@ class ManualConsumptionController extends Controller
                 'type' => 'out',
                 'source' => 'manual',
                 'quantity' => -$validated['quantity'],
+                'unit_cost' => $item->avg_cost,
                 'note' => $validated['reason'],
                 'user_id' => $request->user()->id,
             ]);

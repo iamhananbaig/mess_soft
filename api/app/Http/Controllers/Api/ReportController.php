@@ -8,6 +8,7 @@ use App\Models\ManualConsumption;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\StockMovement;
+use App\Support\PaymentMethods;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -30,7 +31,10 @@ class ReportController extends Controller
         $items = SaleItem::select(
             'menu_item_id',
             DB::raw('SUM(quantity) as total_quantity'),
-            DB::raw('SUM(quantity * unit_price) as total_revenue')
+            DB::raw('SUM(quantity * unit_price) as total_revenue'),
+            DB::raw('SUM(quantity * COALESCE(unit_cost, 0)) as total_cost'),
+            // Sales made before costing existed have no cost; count them so the UI can say so.
+            DB::raw('SUM(CASE WHEN unit_cost IS NULL THEN quantity ELSE 0 END) as uncosted_quantity'),
         )
             ->whereHas('sale', fn ($q) => $q->whereDate('created_at', $date)->notVoided())
             ->groupBy('menu_item_id')
@@ -45,6 +49,20 @@ class ReportController extends Controller
             'items_sold' => $itemsSold,
             'voided_count' => (clone $voided)->count(),
             'voided_amount' => (int) (clone $voided)->sum('total_amount'),
+            'payments' => (clone $sales)
+                ->select('payment_method')
+                ->selectRaw('COUNT(*) as count, SUM(total_amount) as amount')
+                ->groupBy('payment_method')
+                ->get()
+                ->map(fn ($p) => [
+                    'method' => $p->payment_method,
+                    'label' => PaymentMethods::label($p->payment_method),
+                    'count' => (int) $p->count,
+                    'amount' => (int) $p->amount,
+                ]),
+            'total_cost' => round((float) $items->sum('total_cost'), 2),
+            'gross_profit' => round($totalSales - (float) $items->sum('total_cost'), 2),
+            'uncosted_quantity' => (int) $items->sum('uncosted_quantity'),
             'items' => $items,
         ]);
     }
@@ -55,14 +73,28 @@ class ReportController extends Controller
         $from = $request->from ? Carbon::parse($request->from) : Carbon::now()->startOfMonth();
         $to = $request->to ? Carbon::parse($request->to) : Carbon::now();
 
-        $items = SaleItem::select('menu_item_id', DB::raw('SUM(quantity) as total_quantity'), DB::raw('SUM(quantity * unit_price) as total_revenue'))
+        $items = SaleItem::select(
+            'menu_item_id',
+            DB::raw('SUM(quantity) as total_quantity'),
+            DB::raw('SUM(quantity * unit_price) as total_revenue'),
+            DB::raw('SUM(quantity * COALESCE(unit_cost, 0)) as total_cost'),
+            // Sales made before costing existed have no cost; count them so the UI can say so.
+            DB::raw('SUM(CASE WHEN unit_cost IS NULL THEN quantity ELSE 0 END) as uncosted_quantity'),
+        )
             ->whereHas('sale', function ($q) use ($from, $to) {
                 $q->whereBetween('created_at', [$from, $to->copy()->endOfDay()])->notVoided();
             })
             ->groupBy('menu_item_id')
             ->orderByDesc('total_quantity')
             ->with('menuItem:id,name,price')
-            ->get();
+            ->get()
+            ->map(function ($row) {
+                $row->total_cost = round((float) $row->total_cost, 2);
+                $row->profit = round((float) $row->total_revenue - $row->total_cost, 2);
+                $row->margin = (float) $row->total_revenue > 0 ? round($row->profit / (float) $row->total_revenue * 100, 1) : null;
+
+                return $row;
+            });
 
         return response()->json($items);
     }
@@ -92,17 +124,19 @@ class ReportController extends Controller
                 'item' => $m->inventoryItem->name,
                 'unit' => $m->inventoryItem->unit,
                 'quantity' => abs($m->quantity),
+                'value' => round(abs((float) $m->quantity) * (float) $m->unit_cost, 2),
                 'type' => 'expiry',
             ]);
 
         $manual = ManualConsumption::whereBetween('created_at', [$from, $to->copy()->endOfDay()])
-            ->with('inventoryItem:id,name,unit')
+            ->with('inventoryItem:id,name,unit,avg_cost')
             ->get()
             ->map(fn ($c) => [
                 'date' => $c->created_at->format('Y-m-d'),
                 'item' => $c->inventoryItem->name,
                 'unit' => $c->inventoryItem->unit,
                 'quantity' => $c->quantity,
+                'value' => round((float) $c->quantity * (float) $c->inventoryItem->avg_cost, 2),
                 'type' => 'manual',
                 'reason' => $c->reason,
             ]);
@@ -147,7 +181,7 @@ class ReportController extends Controller
         $to = $request->to ? Carbon::parse($request->to)->endOfDay() : Carbon::now();
 
         $items = InventoryItem::active()
-            ->select('id', 'name', 'unit', 'current_stock')
+            ->select('id', 'name', 'unit', 'current_stock', 'avg_cost')
             ->orderBy('name')
             ->get();
 
@@ -182,6 +216,9 @@ class ReportController extends Controller
                 'adjustments' => round((float) ($movements['adjustment'] ?? 0), 2),
                 'void_returns' => round((float) ($movements['void'] ?? 0), 2),
                 'closing' => $closing,
+                'avg_cost' => round((float) $item->avg_cost, 2),
+                // Valued at today's average cost.
+                'closing_value' => round($closing * (float) $item->avg_cost, 2),
             ];
         });
 

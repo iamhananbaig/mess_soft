@@ -13,17 +13,31 @@ class MenuItemController extends Controller
     {
         $items = MenuItem::with('category')
             ->with('recipes.inventoryItem')
-            ->when($request->category_id, fn($q, $catId) => $q->where('category_id', $catId))
+            ->when($request->category_id, fn ($q, $catId) => $q->where('category_id', $catId))
             ->active()
             ->orderBy('name')
             ->get()
-            ->map(fn($item) => array_merge($item->toArray(), [
+            ->map(fn ($item) => array_merge($item->toArray(), [
                 'is_available' => $item->recipes->isEmpty() || $item->recipes->every(
-                    fn($r) => $r->inventoryItem && $r->inventoryItem->current_stock >= $r->quantity
+                    fn ($r) => $r->inventoryItem && $r->inventoryItem->current_stock >= $r->quantity
                 ),
+                ...self::costing($item),
             ]));
 
         return response()->json($items);
+    }
+
+    /**
+     * Food cost of one portion at current average ingredient costs, and the margin.
+     */
+    private static function costing(MenuItem $item): array
+    {
+        $cost = round($item->recipes->sum(fn ($r) => (float) $r->quantity * (float) ($r->inventoryItem?->avg_cost ?? 0)), 2);
+
+        return [
+            'food_cost' => $cost,
+            'margin' => $item->price > 0 ? round(($item->price - $cost) / $item->price * 100, 1) : null,
+        ];
     }
 
     public function store(Request $request): JsonResponse
@@ -37,15 +51,18 @@ class MenuItemController extends Controller
         ]);
 
         $item = MenuItem::create($validated);
+
         return response()->json($item->load('category'), 201);
     }
 
     public function show(MenuItem $menu): JsonResponse
     {
         $menu->load(['category', 'recipes.inventoryItem']);
+
         return response()->json(array_merge($menu->toArray(), [
             'category' => $menu->category,
             'recipes' => $menu->recipes,
+            ...self::costing($menu),
         ]));
     }
 
@@ -62,6 +79,7 @@ class MenuItemController extends Controller
 
         $menu->update($validated);
         $menu->load('category');
+
         return response()->json(array_merge($menu->toArray(), [
             'category' => $menu->category,
         ]));
@@ -70,6 +88,7 @@ class MenuItemController extends Controller
     public function destroy(MenuItem $menu): JsonResponse
     {
         $menu->update(['is_active' => false]);
+
         return response()->json(['message' => 'Menu item deactivated']);
     }
 }

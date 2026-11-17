@@ -9,6 +9,7 @@ use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\Setting;
 use App\Models\StockMovement;
+use App\Support\PaymentMethods;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -25,10 +26,14 @@ class SaleController extends Controller
                 Rule::exists('menu_items', 'id')->where('is_active', true),
             ],
             'items.*.quantity' => 'required|integer|min:1',
-            'amount_received' => 'required|integer|min:0',
+            'payment_method' => ['sometimes', 'string', Rule::in(Setting::pos()['payment_methods'])],
+            'payment_reference' => 'nullable|string|max:100',
+            // Only meaningful for cash (change is calculated from it).
+            'amount_received' => 'required_if:payment_method,cash|required_without:payment_method|nullable|integer|min:0',
         ]);
+        $method = $validated['payment_method'] ?? 'cash';
 
-        return DB::transaction(function () use ($validated, $request) {
+        return DB::transaction(function () use ($validated, $request, $method) {
             $menuItemIds = array_column($validated['items'], 'menu_item_id');
             $menuItems = MenuItem::with('recipes.inventoryItem')
                 ->whereIn('id', $menuItemIds)
@@ -70,28 +75,41 @@ class SaleController extends Controller
                 $totalAmount += $menuItem->price * $item['quantity'];
             }
 
-            if ($validated['amount_received'] < $totalAmount) {
-                return response()->json(['message' => 'Amount received must be greater than or equal to total'], 422);
+            if ($method === 'cash') {
+                if ($validated['amount_received'] < $totalAmount) {
+                    return response()->json(['message' => 'Amount received must be greater than or equal to total'], 422);
+                }
+                $received = $validated['amount_received'];
+            } else {
+                // Card / wallet payments are for the exact amount.
+                $received = $totalAmount;
             }
 
-            $change = $validated['amount_received'] - $totalAmount;
+            $change = $received - $totalAmount;
 
             $sale = Sale::create([
                 'user_id' => $request->user()->id,
                 'total_amount' => $totalAmount,
-                'payment_method' => 'cash',
-                'amount_received' => $validated['amount_received'],
+                'payment_method' => $method,
+                'payment_reference' => $method === 'cash' ? null : ($validated['payment_reference'] ?? null),
+                'amount_received' => $received,
                 'change' => $change,
             ]);
 
             foreach ($validated['items'] as $item) {
                 $menuItem = $menuItems[$item['menu_item_id']];
 
+                // Food cost of one portion at today's average ingredient costs.
+                $unitCost = $menuItem->recipes->sum(
+                    fn ($recipe) => (float) $recipe->quantity * (float) $inventoryItems[$recipe->inventory_item_id]->avg_cost
+                );
+
                 SaleItem::create([
                     'sale_id' => $sale->id,
                     'menu_item_id' => $menuItem->id,
                     'quantity' => $item['quantity'],
                     'unit_price' => $menuItem->price,
+                    'unit_cost' => round($unitCost, 2),
                 ]);
 
                 foreach ($menuItem->recipes as $recipe) {
@@ -104,6 +122,7 @@ class SaleController extends Controller
                         'type' => 'out',
                         'source' => 'sale',
                         'quantity' => -$needed,
+                        'unit_cost' => $inventory->avg_cost,
                         'note' => "Sale #{$sale->id}",
                         'user_id' => $request->user()->id,
                     ]);
@@ -173,7 +192,8 @@ class SaleController extends Controller
                 'amount' => $item->unit_price * $item->quantity,
             ]),
             'total' => $sale->total_amount,
-            'payment_method' => ucfirst($sale->payment_method),
+            'payment_method' => PaymentMethods::label($sale->payment_method),
+            'payment_reference' => $sale->payment_reference,
             'amount_received' => $sale->amount_received,
             'change' => $sale->change,
             'voided' => $sale->voided_at !== null,

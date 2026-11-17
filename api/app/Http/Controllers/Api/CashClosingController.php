@@ -7,6 +7,7 @@ use App\Models\CashClosing;
 use App\Models\Sale;
 use App\Models\User;
 use App\Models\VoidRequest;
+use App\Support\PaymentMethods;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -39,6 +40,8 @@ class CashClosingController extends Controller
                 'closing' => $closing ? [
                     'id' => $closing->id,
                     'expected_cash' => $closing->expected_cash,
+                    'opening_float' => $closing->opening_float,
+                    'non_cash_amount' => $closing->non_cash_amount,
                     'counted_cash' => $closing->counted_cash,
                     'variance' => $closing->variance,
                     'note' => $closing->note,
@@ -62,6 +65,8 @@ class CashClosingController extends Controller
                 'voided_count' => $sum('voided_count'),
                 'voided_amount' => $sum('voided_amount'),
                 'expected_cash' => $sum('expected_cash'),
+                'non_cash_amount' => $sum('non_cash_amount'),
+                'opening_float' => $closed->sum(fn ($c) => $c['closing']['opening_float']),
                 'pending_voids' => $sum('pending_voids'),
                 'counted_cash' => $closed->sum(fn ($c) => $c['closing']['counted_cash']),
                 'variance' => $closed->sum(fn ($c) => $c['closing']['variance']),
@@ -80,6 +85,7 @@ class CashClosingController extends Controller
             'date' => 'required|date_format:Y-m-d|before_or_equal:today',
             'user_id' => 'required|exists:users,id',
             'counted_cash' => 'required|integer|min:0',
+            'opening_float' => 'nullable|integer|min:0',
             'note' => 'nullable|string|max:255',
         ]);
 
@@ -110,8 +116,11 @@ class CashClosingController extends Controller
                 'voided_count' => $figures['voided_count'],
                 'voided_amount' => $figures['voided_amount'],
                 'expected_cash' => $figures['expected_cash'],
+                'opening_float' => $validated['opening_float'] ?? 0,
+                'non_cash_amount' => $figures['non_cash_amount'],
                 'counted_cash' => $validated['counted_cash'],
-                'variance' => $validated['counted_cash'] - $figures['expected_cash'],
+                // The float is in the drawer too, but it isn't takings.
+                'variance' => $validated['counted_cash'] - ($validated['opening_float'] ?? 0) - $figures['expected_cash'],
                 'note' => $validated['note'] ?? null,
                 'closed_by' => $request->user()->id,
             ]);
@@ -132,6 +141,7 @@ class CashClosingController extends Controller
             ->selectRaw('COALESCE(SUM(total_amount), 0) as gross_amount')
             ->selectRaw('SUM(CASE WHEN voided_at IS NOT NULL THEN 1 ELSE 0 END) as voided_count')
             ->selectRaw('COALESCE(SUM(CASE WHEN voided_at IS NOT NULL THEN total_amount ELSE 0 END), 0) as voided_amount')
+            ->selectRaw("COALESCE(SUM(CASE WHEN voided_at IS NULL AND payment_method = 'cash' THEN total_amount ELSE 0 END), 0) as cash_amount")
             ->groupBy('user_id')
             ->get()
             ->keyBy('user_id');
@@ -142,18 +152,41 @@ class CashClosingController extends Controller
             ->get()
             ->countBy(fn ($r) => $r->sale->user_id);
 
-        return $rows->map(fn ($r) => [
-            'sales_count' => (int) $r->sales_count - (int) $r->voided_count,
-            'gross_amount' => (int) $r->gross_amount,
-            'voided_count' => (int) $r->voided_count,
-            'voided_amount' => (int) $r->voided_amount,
-            'expected_cash' => (int) $r->gross_amount - (int) $r->voided_amount,
-            'pending_voids' => (int) ($pending[$r->user_id] ?? 0),
-        ]);
+        // Non-cash takings per method (not in the drawer), non-voided only.
+        $nonCash = Sale::whereDate('created_at', $date)
+            ->when($userId, fn ($q) => $q->where('user_id', $userId))
+            ->whereNull('voided_at')
+            ->where('payment_method', '!=', 'cash')
+            ->select('user_id', 'payment_method')
+            ->selectRaw('SUM(total_amount) as amount')
+            ->groupBy('user_id', 'payment_method')
+            ->get()
+            ->groupBy('user_id');
+
+        return $rows->map(function ($r) use ($pending, $nonCash) {
+            $methods = ($nonCash[$r->user_id] ?? collect())
+                ->map(fn ($m) => ['method' => $m->payment_method, 'label' => PaymentMethods::label($m->payment_method), 'amount' => (int) $m->amount])
+                ->values();
+
+            return [
+                'sales_count' => (int) $r->sales_count - (int) $r->voided_count,
+                'gross_amount' => (int) $r->gross_amount,
+                'voided_count' => (int) $r->voided_count,
+                'voided_amount' => (int) $r->voided_amount,
+                // Only cash ends up in the drawer.
+                'expected_cash' => (int) $r->cash_amount,
+                'non_cash_amount' => (int) $methods->sum('amount'),
+                'non_cash' => $methods,
+                'pending_voids' => (int) ($pending[$r->user_id] ?? 0),
+            ];
+        });
     }
 
     private function emptyFigures(): array
     {
-        return ['sales_count' => 0, 'gross_amount' => 0, 'voided_count' => 0, 'voided_amount' => 0, 'expected_cash' => 0, 'pending_voids' => 0];
+        return [
+            'sales_count' => 0, 'gross_amount' => 0, 'voided_count' => 0, 'voided_amount' => 0,
+            'expected_cash' => 0, 'non_cash_amount' => 0, 'non_cash' => [], 'pending_voids' => 0,
+        ];
     }
 }

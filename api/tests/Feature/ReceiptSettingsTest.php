@@ -28,7 +28,8 @@ class ReceiptSettingsTest extends TestCase
             ->assertJson([
                 'canteen_name' => config('app.receipt.canteen_name'),
                 'footer_text' => 'Thank you for visiting!',
-                'paper_width' => '58',
+                'paper_width' => '80',
+                'text_size' => 'large',
                 'show_cashier' => true,
             ]);
     }

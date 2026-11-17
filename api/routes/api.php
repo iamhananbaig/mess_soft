@@ -24,6 +24,9 @@ Route::prefix('v1')->group(function () {
         Route::put('/me/password', [AuthController::class, 'changePassword'])->middleware('throttle:10,1');
 
         Route::get('/settings/receipt', [SettingController::class, 'receipt']);
+        Route::get('/settings/pos', [SettingController::class, 'pos']);
+        Route::put('/settings/pos', [SettingController::class, 'updatePos'])
+            ->middleware('permission:settings:manage');
         Route::put('/settings/receipt', [SettingController::class, 'updateReceipt'])
             ->middleware('permission:settings:manage');
 

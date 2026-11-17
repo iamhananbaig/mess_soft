@@ -9,7 +9,7 @@ class CashClosing extends Model
 {
     protected $fillable = [
         'date', 'user_id', 'sales_count', 'gross_amount', 'voided_count', 'voided_amount',
-        'expected_cash', 'counted_cash', 'variance', 'note', 'closed_by',
+        'expected_cash', 'opening_float', 'non_cash_amount', 'counted_cash', 'variance', 'note', 'closed_by',
     ];
 
     protected $casts = [
@@ -19,6 +19,8 @@ class CashClosing extends Model
         'voided_count' => 'integer',
         'voided_amount' => 'integer',
         'expected_cash' => 'integer',
+        'opening_float' => 'integer',
+        'non_cash_amount' => 'integer',
         'counted_cash' => 'integer',
         'variance' => 'integer',
     ];

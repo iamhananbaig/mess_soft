@@ -99,6 +99,7 @@ class VoidRequestController extends Controller
                     'type' => 'in',
                     'source' => 'void',
                     'quantity' => $quantity,
+                    'unit_cost' => $movement->unit_cost,
                     'reference' => "VOID-{$voidRequest->id}",
                     'note' => "Void of Sale #{$sale->id}",
                     'user_id' => $request->user()->id,

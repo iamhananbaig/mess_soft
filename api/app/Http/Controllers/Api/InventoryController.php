@@ -31,9 +31,13 @@ class InventoryController extends Controller
             'name' => 'required|string|max:255',
             'unit' => 'required|string|max:50',
             'current_stock' => 'sometimes|numeric|min:0',
+            'reorder_level' => 'sometimes|numeric|min:0',
+            'unit_cost' => 'nullable|numeric|min:0',
             'expiry_date' => 'nullable|date',
         ]);
 
+        $validated['avg_cost'] = $validated['unit_cost'] ?? 0;
+        unset($validated['unit_cost']);
         $item = InventoryItem::create($validated);
 
         return response()->json($item, 201);
@@ -44,6 +48,9 @@ class InventoryController extends Controller
         $validated = $request->validate([
             'name' => 'sometimes|string|max:255',
             'unit' => 'sometimes|string|max:50',
+            'reorder_level' => 'sometimes|numeric|min:0',
+            // Lets an admin set the cost of stock already on hand (e.g. when costing starts).
+            'avg_cost' => 'sometimes|numeric|min:0',
             'expiry_date' => 'nullable|date',
             'is_active' => 'sometimes|boolean',
         ]);
@@ -58,19 +65,36 @@ class InventoryController extends Controller
         $validated = $request->validate([
             'inventory_item_id' => 'required|exists:inventory_items,id',
             'quantity' => 'required|numeric|min:0.01',
+            // Either the price per unit or the bill total for this delivery (optional).
+            'unit_cost' => 'nullable|numeric|min:0',
+            'total_cost' => 'nullable|numeric|min:0',
+            'expiry_date' => 'nullable|date',
             'reference' => 'nullable|string|max:255',
             'note' => 'nullable|string|max:255',
         ]);
 
         return DB::transaction(function () use ($validated) {
             $item = InventoryItem::lockForUpdate()->findOrFail($validated['inventory_item_id']);
-            $item->increment('current_stock', $validated['quantity']);
+
+            $unitCost = $validated['unit_cost']
+                ?? (isset($validated['total_cost']) ? round($validated['total_cost'] / $validated['quantity'], 4) : null);
+
+            // Average cost must be computed from the stock BEFORE this delivery.
+            $extra = [];
+            if ($unitCost !== null) {
+                $extra['avg_cost'] = $item->averageCostAfterPurchase((float) $validated['quantity'], (float) $unitCost);
+            }
+            if (! empty($validated['expiry_date'])) {
+                $extra['expiry_date'] = $validated['expiry_date'];
+            }
+            $item->increment('current_stock', $validated['quantity'], $extra);
 
             StockMovement::create([
                 'inventory_item_id' => $item->id,
                 'type' => 'in',
                 'source' => 'stock-in',
                 'quantity' => $validated['quantity'],
+                'unit_cost' => $unitCost,
                 'reference' => $validated['reference'] ?? null,
                 'note' => $validated['note'] ?? null,
                 'user_id' => auth()->id(),
@@ -101,6 +125,7 @@ class InventoryController extends Controller
                 'type' => 'adjustment',
                 'source' => 'adjustment',
                 'quantity' => $validated['quantity'],
+                'unit_cost' => $item->avg_cost,
                 'note' => $validated['note'] ?? null,
                 'user_id' => auth()->id(),
             ]);
@@ -130,6 +155,7 @@ class InventoryController extends Controller
                 'type' => 'expiry',
                 'source' => 'expiry',
                 'quantity' => -$validated['quantity'],
+                'unit_cost' => $item->avg_cost,
                 'note' => $validated['note'] ?? null,
                 'user_id' => auth()->id(),
             ]);

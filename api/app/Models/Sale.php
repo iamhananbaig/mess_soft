@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Sale extends Model
 {
-    protected $fillable = ['user_id', 'total_amount', 'payment_method', 'amount_received', 'change', 'voided_at'];
+    protected $fillable = ['user_id', 'total_amount', 'payment_method', 'payment_reference', 'amount_received', 'change', 'voided_at'];
 
     protected $casts = ['total_amount' => 'integer', 'amount_received' => 'integer', 'change' => 'integer', 'voided_at' => 'datetime'];
 
