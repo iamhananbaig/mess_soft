@@ -20,18 +20,19 @@ class ReportController extends Controller
         $request->validate(['date' => 'nullable|date_format:Y-m-d']);
         $date = $request->date ? Carbon::parse($request->date) : Carbon::today();
 
-        $sales = Sale::whereDate('created_at', $date);
+        $sales = Sale::whereDate('created_at', $date)->notVoided();
+        $voided = Sale::whereDate('created_at', $date)->whereNotNull('voided_at');
 
         $totalSales = (clone $sales)->sum('total_amount');
         $totalTransactions = (clone $sales)->count();
-        $itemsSold = SaleItem::whereHas('sale', fn ($q) => $q->whereDate('created_at', $date))->sum('quantity');
+        $itemsSold = SaleItem::whereHas('sale', fn ($q) => $q->whereDate('created_at', $date)->notVoided())->sum('quantity');
 
         $items = SaleItem::select(
             'menu_item_id',
             DB::raw('SUM(quantity) as total_quantity'),
             DB::raw('SUM(quantity * unit_price) as total_revenue')
         )
-            ->whereHas('sale', fn ($q) => $q->whereDate('created_at', $date))
+            ->whereHas('sale', fn ($q) => $q->whereDate('created_at', $date)->notVoided())
             ->groupBy('menu_item_id')
             ->with('menuItem:id,name')
             ->orderByDesc('total_quantity')
@@ -42,6 +43,8 @@ class ReportController extends Controller
             'total_sales' => $totalSales,
             'total_transactions' => $totalTransactions,
             'items_sold' => $itemsSold,
+            'voided_count' => (clone $voided)->count(),
+            'voided_amount' => (int) (clone $voided)->sum('total_amount'),
             'items' => $items,
         ]);
     }
@@ -54,7 +57,7 @@ class ReportController extends Controller
 
         $items = SaleItem::select('menu_item_id', DB::raw('SUM(quantity) as total_quantity'), DB::raw('SUM(quantity * unit_price) as total_revenue'))
             ->whereHas('sale', function ($q) use ($from, $to) {
-                $q->whereBetween('created_at', [$from, $to->copy()->endOfDay()]);
+                $q->whereBetween('created_at', [$from, $to->copy()->endOfDay()])->notVoided();
             })
             ->groupBy('menu_item_id')
             ->orderByDesc('total_quantity')
@@ -122,6 +125,7 @@ class ReportController extends Controller
             'created_at' => $sale->created_at->toIso8601String(),
             'payment_method' => $sale->payment_method,
             'total_amount' => $sale->total_amount,
+            'is_voided' => $sale->voided_at !== null,
             'items' => $sale->items->map(fn ($item) => [
                 'item' => $item->menuItem->name,
                 'price' => $item->unit_price,
@@ -176,6 +180,7 @@ class ReportController extends Controller
                 'manual_consumption' => round((float) ($movements['manual'] ?? 0), 2),
                 'expired' => round((float) ($movements['expiry'] ?? 0), 2),
                 'adjustments' => round((float) ($movements['adjustment'] ?? 0), 2),
+                'void_returns' => round((float) ($movements['void'] ?? 0), 2),
                 'closing' => $closing,
             ];
         });
@@ -224,6 +229,7 @@ class ReportController extends Controller
                     'manual' => 'Manual Consumption',
                     'adjustment' => 'Adjustment',
                     'expiry' => 'Expired',
+                    'void' => 'Sale Void',
                     default => ucfirst($m->type),
                 },
                 'quantity' => (float) $m->quantity,

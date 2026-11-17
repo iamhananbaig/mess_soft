@@ -15,6 +15,9 @@ const statusVariants: Record<string, 'default' | 'secondary' | 'outline' | 'dest
   manager: 'outline',
   cashier: 'outline',
   employee: 'secondary',
+  pending: 'outline',
+  approved: 'destructive',
+  rejected: 'secondary',
 };
 
 export function StatusBadge({ status, variant, className }: StatusBadgeProps) {

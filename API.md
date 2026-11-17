@@ -175,6 +175,29 @@ Any authenticated user. Returns user + roles + permissions.
 
 ---
 
+## Sale Voids (approval flow)
+
+| Method | Endpoint | Permission |
+|---|---|---|
+| POST | `/sales/{sale}/void-requests` | `sales:void-request` |
+| GET | `/void-requests?status=pending\|approved\|rejected` | `sales:void-request` or `sales:void-approve` (requesters see only their own) |
+| POST | `/void-requests/{id}/approve` | `sales:void-approve` |
+| POST | `/void-requests/{id}/reject` | `sales:void-approve` |
+
+- Request body: `{ "reason": "Wrong item" }`; review body: `{ "note": "optional" }`.
+- One pending request per sale; a reviewer cannot review their own request; reviewed requests are final.
+- Approve: in one transaction, returns exactly the stock the sale consumed (from its `source=sale` movements, as `source=void` movements) and sets `sales.voided_at`.
+- Voided sales are excluded from `/reports/daily` and `/reports/items`; `/reports/daily` adds `voided_count`, `voided_amount`; `/reports/receipts` flags `is_voided`; `/sales/{id}/receipt` adds `voided`; `/reports/stock-summary` adds `void_returns`.
+
+## Receipt Settings
+
+| Method | Endpoint | Permission |
+|---|---|---|
+| GET | `/settings/receipt` | any signed-in user (needed to print) |
+| PUT | `/settings/receipt` | `settings:manage` |
+
+Fields: `canteen_name`, `branch_name`, `show_branch`, `header_lines` (≤3 lines), `footer_text`, `show_cashier`, `show_payment`, `paper_width` (`58`/`80`), `tear_feed_lines` (0–12). Defaults reproduce the original slip.
+
 ## Manual Consumption
 
 | Method | Endpoint | Permission |

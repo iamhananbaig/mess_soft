@@ -32,6 +32,7 @@ interface ReceiptData {
   created_at: string;
   payment_method: string;
   total_amount: number;
+  is_voided?: boolean;
   items: ReceiptItem[];
 }
 
@@ -74,7 +75,7 @@ export function ReportsPage() {
   const [date, setDate] = useState<Date>(new Date());
   const [fromDate, setFromDate] = useState<Date>(() => { const d = new Date(); d.setDate(1); return d; });
   const [toDate, setToDate] = useState<Date>(new Date());
-  const [daily, setDaily] = useState({ total_sales: 0, total_transactions: 0, items_sold: 0, items: [] as { menu_item: { name: string }; total_quantity: number; total_revenue: number }[] });
+  const [daily, setDaily] = useState({ total_sales: 0, total_transactions: 0, items_sold: 0, voided_count: 0, voided_amount: 0, items: [] as { menu_item: { name: string }; total_quantity: number; total_revenue: number }[] });
   const [receipts, setReceipts] = useState<ReceiptData[]>([]);
   const [groupReceipts, setGroupReceipts] = useState(true);
   const [items, setItems] = useState<{ menu_item: { name: string }; total_quantity: number; total_revenue: number }[]>([]);
@@ -165,6 +166,7 @@ export function ReportsPage() {
       created_at: r.created_at,
       payment_method: r.payment_method,
       receipt_total: r.total_amount,
+      is_voided: r.is_voided,
       ...item,
     }))
   );
@@ -244,7 +246,12 @@ export function ReportsPage() {
                     <CardTitle className="text-sm font-medium text-muted-foreground">Transactions</CardTitle>
                     <Receipt className="size-4 text-accent" />
                   </CardHeader>
-                  <CardContent><div className="text-2xl font-bold">{daily.total_transactions}</div></CardContent>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{daily.total_transactions}</div>
+                    {daily.voided_count > 0 && (
+                      <p className="text-xs text-destructive mt-1">{daily.voided_count} voided ({formatPKR(daily.voided_amount)}) — not counted</p>
+                    )}
+                  </CardContent>
                 </Card>
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -294,7 +301,8 @@ export function ReportsPage() {
                       <div key={r.id} className="rounded-lg border">
                         <div className="flex items-center justify-between border-b bg-muted/50 px-4 py-2">
                           <div className="flex items-center gap-3">
-                            <span className="text-sm font-semibold">#{r.id}</span>
+                            <span className={`text-sm font-semibold ${r.is_voided ? 'line-through text-muted-foreground' : ''}`}>#{r.id}</span>
+                            {r.is_voided && <Badge variant="destructive">Voided</Badge>}
                             <span className="text-sm text-muted-foreground">{formatDateTime(r.created_at)}</span>
                             <span className="text-xs text-muted-foreground capitalize">{r.payment_method}</span>
                           </div>
@@ -332,7 +340,10 @@ export function ReportsPage() {
                     <TableBody>
                       {flatReceiptItems.map((r, idx) => (
                         <TableRow key={idx}>
-                          <TableCell className="font-medium">#{r.receipt_id}</TableCell>
+                          <TableCell className="font-medium">
+                            #{r.receipt_id}
+                            {r.is_voided && <Badge variant="destructive" className="ml-2">Voided</Badge>}
+                          </TableCell>
                           <TableCell>{formatDateTime(r.created_at)}</TableCell>
                           <TableCell>{r.item}</TableCell>
                           <TableCell className="text-right">{formatPKR(r.price)}</TableCell>

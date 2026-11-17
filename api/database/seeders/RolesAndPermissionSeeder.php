@@ -19,10 +19,11 @@ class RolesAndPermissionSeeder extends Seeder
             'menu:view', 'menu:create', 'menu:edit', 'menu:delete',
             'recipes:manage',
             'inventory:view', 'inventory:create', 'inventory:edit',
-            'sales:create', 'sales:view',
+            'sales:create', 'sales:view', 'sales:void-request', 'sales:void-approve',
             'consumptions:create', 'consumptions:view',
             'reports:view',
             'employees:view', 'employees:edit',
+            'settings:manage',
         ];
 
         // Idempotent: the Docker entrypoint runs this seeder on every container start.
@@ -58,16 +59,17 @@ class RolesAndPermissionSeeder extends Seeder
                 'menu:view', 'menu:create', 'menu:edit', 'menu:delete',
                 'recipes:manage',
                 'inventory:view', 'inventory:create', 'inventory:edit',
-                'sales:create', 'sales:view',
+                'sales:create', 'sales:view', 'sales:void-request', 'sales:void-approve',
                 'consumptions:create', 'consumptions:view',
                 'reports:view',
                 'employees:view', 'employees:edit',
+                'settings:manage',
             ],
             'manager' => [
                 'pos:use',
                 'menu:view', 'menu:edit',
                 'inventory:view', 'inventory:create',
-                'sales:create', 'sales:view',
+                'sales:create', 'sales:view', 'sales:void-request', 'sales:void-approve',
                 'consumptions:create', 'consumptions:view',
                 'reports:view',
                 'employees:view',
@@ -75,12 +77,12 @@ class RolesAndPermissionSeeder extends Seeder
             'cashier' => [
                 'pos:use',
                 'menu:view',
-                'sales:create', 'sales:view',
+                'sales:create', 'sales:view', 'sales:void-request',
             ],
             'employee' => [
                 'pos:use',
                 'menu:view',
-                'sales:create', 'sales:view',
+                'sales:create', 'sales:view', 'sales:void-request',
                 'consumptions:create', 'consumptions:view',
             ],
         ];

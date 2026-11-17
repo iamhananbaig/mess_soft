@@ -10,6 +10,8 @@ use App\Http\Controllers\Api\PermissionController;
 use App\Http\Controllers\Api\RecipeController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\SaleController;
+use App\Http\Controllers\Api\SettingController;
+use App\Http\Controllers\Api\VoidRequestController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
@@ -18,6 +20,10 @@ Route::prefix('v1')->group(function () {
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::get('/me', [AuthController::class, 'me']);
+
+        Route::get('/settings/receipt', [SettingController::class, 'receipt']);
+        Route::put('/settings/receipt', [SettingController::class, 'updateReceipt'])
+            ->middleware('permission:settings:manage');
 
         Route::middleware('permission:categories:view')->group(function () {
             Route::get('/categories', [CategoryController::class, 'index']);
@@ -75,6 +81,15 @@ Route::prefix('v1')->group(function () {
             Route::get('/sales', [SaleController::class, 'index']);
             Route::get('/sales/{sale}', [SaleController::class, 'show']);
             Route::get('/sales/{sale}/receipt', [SaleController::class, 'receipt']);
+        });
+
+        Route::post('/sales/{sale}/void-requests', [VoidRequestController::class, 'store'])
+            ->middleware('permission:sales:void-request');
+        Route::get('/void-requests', [VoidRequestController::class, 'index'])
+            ->middleware('permission:sales:void-request|sales:void-approve');
+        Route::middleware('permission:sales:void-approve')->group(function () {
+            Route::post('/void-requests/{voidRequest}/approve', [VoidRequestController::class, 'approve']);
+            Route::post('/void-requests/{voidRequest}/reject', [VoidRequestController::class, 'reject']);
         });
 
         Route::middleware('permission:consumptions:create')->group(function () {

@@ -1,4 +1,4 @@
-import { encodeReceiptCopies } from '@/lib/escpos';
+import { encodeReceiptCopies, type ReceiptSettings } from '@/lib/escpos';
 import type { ReceiptCopy, ReceiptData } from '@/types/receipt';
 
 const STORAGE_KEY = 'printer_config';
@@ -466,7 +466,11 @@ class PrinterService {
    */
   async printReceipt(
     data: ReceiptData,
-    { copies = ['customer', 'accounts'], reprint = false }: { copies?: ReceiptCopy[]; reprint?: boolean } = {},
+    {
+      copies = ['customer', 'accounts'],
+      reprint = false,
+      settings,
+    }: { copies?: ReceiptCopy[]; reprint?: boolean; settings?: Partial<ReceiptSettings> } = {},
   ) {
     if (!this.config.type) {
       throw new Error('No printer set up. Connect one via USB or Bluetooth first.');
@@ -478,7 +482,7 @@ class PrinterService {
     }
     try {
       // All copies go in one job so they come out back-to-back, each cut separately.
-      await this.print(encodeReceiptCopies(data, copies, { reprint, autoCut: this.autoCut }));
+      await this.print(encodeReceiptCopies(data, copies, { reprint, autoCut: this.autoCut, settings }));
     } catch (err) {
       console.error('Direct printer communication failed:', err);
       throw new Error(

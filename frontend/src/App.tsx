@@ -16,6 +16,8 @@ const ReportsPage = lazy(() => import('@/pages/ReportsPage').then((m) => ({ defa
 const ConsumptionPage = lazy(() => import('@/pages/ConsumptionPage').then((m) => ({ default: m.ConsumptionPage })));
 const EmployeesPage = lazy(() => import('@/pages/EmployeesPage').then((m) => ({ default: m.EmployeesPage })));
 const PermissionsPage = lazy(() => import('@/pages/PermissionsPage').then((m) => ({ default: m.PermissionsPage })));
+const VoidsPage = lazy(() => import('@/pages/VoidsPage').then((m) => ({ default: m.VoidsPage })));
+const ReceiptDesignPage = lazy(() => import('@/pages/ReceiptDesignPage').then((m) => ({ default: m.ReceiptDesignPage })));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage').then((m) => ({ default: m.NotFoundPage })));
 
 export default function App() {
@@ -39,6 +41,8 @@ export default function App() {
                 <Route path="inventory" element={<Suspense fallback={<PageSpinner />}><InventoryPage /></Suspense>} />
                 <Route path="reports" element={<Suspense fallback={<PageSpinner />}><ReportsPage /></Suspense>} />
                 <Route path="consumptions" element={<Suspense fallback={<PageSpinner />}><ConsumptionPage /></Suspense>} />
+                <Route path="voids" element={<Suspense fallback={<PageSpinner />}><VoidsPage /></Suspense>} />
+                <Route path="receipt-design" element={<Suspense fallback={<PageSpinner />}><ReceiptDesignPage /></Suspense>} />
                 <Route path="employees" element={<Suspense fallback={<PageSpinner />}><EmployeesPage /></Suspense>} />
                 <Route path="permissions" element={<Suspense fallback={<PageSpinner />}><PermissionsPage /></Suspense>} />
                 <Route path="*" element={<Suspense fallback={<PageSpinner />}><NotFoundPage /></Suspense>} />

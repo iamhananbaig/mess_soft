@@ -1,4 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { encodeReceiptCopies } from '@/lib/escpos';
+import { useReceiptSettings } from '@/hooks/useReceiptSettings';
+import { SlipPreview } from '@/components/SlipPreview';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
@@ -31,6 +34,13 @@ export function PrintDialog({ data, open, onOpenChange, reprint = false }: Print
   const [lastError, setLastError] = useState<string | null>(null);
   const [copyChoice, setCopyChoice] = useState<CopyChoice>('both');
   const [autoCut, setAutoCut] = useState(printer.autoCut);
+  const [showPreview, setShowPreview] = useState(false);
+  const settings = useReceiptSettings();
+  const selectedCopies = COPY_CHOICES.find((c) => c.value === copyChoice)!.copies;
+  const previewBytes = useMemo(
+    () => (data && showPreview ? encodeReceiptCopies(data, selectedCopies, { reprint, autoCut, settings }) : null),
+    [data, showPreview, selectedCopies, reprint, autoCut, settings],
+  );
 
   // Keep status live while the dialog is open (USB unplugged, BLE dropped, auto-reconnected).
   useEffect(() => printer.subscribe(() => {
@@ -102,7 +112,7 @@ export function PrintDialog({ data, open, onOpenChange, reprint = false }: Print
     setPrinting(true);
     try {
       const choice = COPY_CHOICES.find((c) => c.value === copyChoice)!;
-      await printer.printReceipt(data, { copies: choice.copies, reprint });
+      await printer.printReceipt(data, { copies: choice.copies, reprint, settings });
       showToast(choice.copies.length > 1 ? 'Customer and accounts copies printed' : `${choice.label} copy printed`, 'success');
       onOpenChange(false);
     } catch (err) {
@@ -118,7 +128,7 @@ export function PrintDialog({ data, open, onOpenChange, reprint = false }: Print
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-sm" showCloseButton={!printing}>
+      <DialogContent className={showPreview ? 'sm:max-w-md max-h-[90vh] flex flex-col' : 'sm:max-w-sm'} showCloseButton={!printing}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Printer className="size-4" />
@@ -239,6 +249,15 @@ export function PrintDialog({ data, open, onOpenChange, reprint = false }: Print
               ))}
             </div>
           </div>
+
+          <Button type="button" variant="ghost" size="sm" className="h-7 text-xs px-2" onClick={() => setShowPreview((v) => !v)}>
+            {showPreview ? 'Hide preview' : 'Show preview'}
+          </Button>
+          {previewBytes && (
+            <div className="max-h-[45vh] overflow-auto rounded-md bg-muted p-3 flex justify-center">
+              <SlipPreview bytes={previewBytes} />
+            </div>
+          )}
 
           {lastError && (
             <p className="text-xs text-destructive">{lastError}</p>

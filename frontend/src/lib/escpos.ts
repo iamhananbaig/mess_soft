@@ -129,6 +129,41 @@ function line(char: string, width: number): string {
   return char.repeat(width);
 }
 
+// ── Receipt settings ─────────────────────────────────────────────────
+
+/** Shop-wide slip layout, edited on the Receipt Design page (GET/PUT /settings/receipt). */
+export interface ReceiptSettings {
+  canteen_name: string;
+  branch_name: string;
+  show_branch: boolean;
+  /** Up to 3 lines (address, phone…) printed under the name. */
+  header_lines: string;
+  footer_text: string;
+  show_cashier: boolean;
+  show_payment: boolean;
+  paper_width: '58' | '80';
+  tear_feed_lines: number;
+}
+
+/** Matches the slip as printed before settings existed. */
+export const DEFAULT_RECEIPT_SETTINGS: ReceiptSettings = {
+  canteen_name: '',
+  branch_name: '',
+  show_branch: false,
+  header_lines: '',
+  footer_text: 'Thank you for visiting!',
+  show_cashier: true,
+  show_payment: true,
+  paper_width: '58',
+  tear_feed_lines: TEAR_FEED_LINES,
+};
+
+export function profileForPaper(width: ReceiptSettings['paper_width']): EscPosProfile {
+  return width === '80'
+    ? { printWidthDots: 576, fontBColumns: 64 } // 80mm: 576 / 9
+    : DEFAULT_ESC_POS_PROFILE;
+}
+
 // ── Receipt encoder ──────────────────────────────────────────────────
 
 export interface EncodeReceiptOptions {
@@ -136,15 +171,16 @@ export interface EncodeReceiptOptions {
   copy: ReceiptCopy;
   /** Reprint of an earlier sale — marked DUPLICATE instead of ORIGINAL. */
   reprint?: boolean;
-  profile?: EscPosProfile;
   /**
    * Printer has an auto-cutter. When false, no cut command is sent; instead a
    * tear guide is printed and the paper is fed past the tear bar.
    */
   autoCut?: boolean;
+  /** Layout; the canteen name falls back to the one on the receipt data. */
+  settings?: Partial<ReceiptSettings>;
 }
 
-/** Encode several copies of one receipt into a single job, each ending in a cut. */
+/** Encode several copies of one receipt into a single job, each ending in a cut/tear. */
 export function encodeReceiptCopies(
   data: ReceiptData,
   copies: ReceiptCopy[],
@@ -154,11 +190,16 @@ export function encodeReceiptCopies(
 }
 
 export function encodeReceipt(data: ReceiptData, options: EncodeReceiptOptions): Uint8Array {
-  const { copy, reprint = false, profile = DEFAULT_ESC_POS_PROFILE, autoCut = false } = options;
+  const { copy, reprint = false, autoCut = false } = options;
+  const settings: ReceiptSettings = { ...DEFAULT_RECEIPT_SETTINGS, ...options.settings };
+  const profile = profileForPaper(settings.paper_width);
+  const canteenName = settings.canteen_name || data.canteen_name;
+
   const parts: Uint8Array[] = [];
   const isCash = data.payment_method === 'Cash';
   const W = profile.fontBColumns;
   const SAFE_W = W - 3; // leave 3 chars (~27 dots) of right margin
+  const rule = (char: string) => text(line(char, W) + '\n');
 
   parts.push(initialize());
   parts.push(selectFontB());
@@ -167,130 +208,107 @@ export function encodeReceipt(data: ReceiptData, options: EncodeReceiptOptions):
   // Header
   parts.push(align('center'));
   parts.push(bold(true));
-
-  const title = `*** ${data.canteen_name} ***`;
-
+  const title = `*** ${canteenName} ***`;
   if (title.length <= Math.floor(W / 2)) {
     parts.push(doubleWidth(true));
-    parts.push(text(title));
-    parts.push(newline());
+    parts.push(text(title + '\n'));
     parts.push(doubleWidth(false));
   } else {
-    parts.push(text(title));
-    parts.push(newline());
+    parts.push(text(title + '\n'));
   }
-
   parts.push(bold(false));
-  parts.push(text(line('=', W)));
-  parts.push(newline());
+
+  if (settings.show_branch && settings.branch_name) {
+    parts.push(text(settings.branch_name + '\n'));
+  }
+  for (const headerLine of settings.header_lines.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 3)) {
+    parts.push(text(headerLine + '\n'));
+  }
+  parts.push(rule('='));
+
+  // Voided sale reprint — impossible to miss
+  if (data.voided) {
+    parts.push(bold(true));
+    parts.push(doubleSize(true));
+    parts.push(text('** VOID **\n'));
+    parts.push(doubleSize(false));
+    parts.push(text('Not valid as a receipt\n'));
+    parts.push(bold(false));
+    parts.push(rule('='));
+  }
 
   // Copy label — prominent so customer and accounts slips are never mixed up
   parts.push(bold(true));
   parts.push(doubleWidth(true));
-  parts.push(text(RECEIPT_COPY_LABELS[copy]));
-  parts.push(newline());
+  parts.push(text(RECEIPT_COPY_LABELS[copy] + '\n'));
   parts.push(doubleWidth(false));
   parts.push(bold(false));
-  parts.push(text(line('=', W)));
-  parts.push(newline());
+  parts.push(rule('='));
 
   // Info
   parts.push(align('left'));
   const halfInfo = Math.floor(SAFE_W / 2);
+  const status = reprint ? 'DUPLICATE' : 'ORIGINAL';
+  parts.push(text(padRight(`#${data.receipt_number}`, halfInfo) + padLeft(`${data.date}  ${data.time}`, halfInfo) + '\n'));
   parts.push(
     text(
-      padRight(`#${data.receipt_number}`, halfInfo) +
-        padLeft(`${data.date}  ${data.time}`, halfInfo) +
-        '\n'
-    )
+      settings.show_cashier
+        ? padRight(`Cashier: ${data.cashier}`, halfInfo) + padLeft(status, halfInfo) + '\n'
+        : padLeft(status, halfInfo * 2) + '\n',
+    ),
   );
-  parts.push(
-    text(
-      padRight(`Cashier: ${data.cashier}`, halfInfo) +
-        padLeft(reprint ? 'DUPLICATE' : 'ORIGINAL', halfInfo) +
-        '\n'
-    )
-  );
+  parts.push(rule('-'));
 
-  // Separator
-  parts.push(text(line('-', W) + '\n'));
-
-  // Column header — column widths fit within SAFE_W
-  const itemCol = 18;
+  // Items — the name column absorbs extra width on 80mm paper
   const qtyCol = 11;
-  const amtCol = SAFE_W - itemCol - qtyCol; // 10
-
-  parts.push(
-    text(
-      padRight('Item', itemCol) +
-        padRight('Qty x Rate', qtyCol) +
-        padLeft('= Amt', amtCol) +
-        '\n'
-    )
-  );
-  parts.push(text(line('-', W) + '\n'));
-
-  // Items
+  const amtCol = 10;
+  const itemCol = SAFE_W - qtyCol - amtCol;
+  parts.push(text(padRight('Item', itemCol) + padRight('Qty x Rate', qtyCol) + padLeft('= Amt', amtCol) + '\n'));
+  parts.push(rule('-'));
   for (const item of data.items) {
     const name = item.name.length > itemCol ? item.name.slice(0, itemCol - 3) + '...' : item.name;
-    const qtyRate = `${item.quantity} x ${item.rate}`;
-    parts.push(
-      text(
-        padRight(name, itemCol) +
-          padRight(qtyRate, qtyCol) +
-          padLeft(String(item.amount), amtCol) +
-          '\n'
-      )
-    );
+    parts.push(text(padRight(name, itemCol) + padRight(`${item.quantity} x ${item.rate}`, qtyCol) + padLeft(String(item.amount), amtCol) + '\n'));
   }
-
-  // Separator
-  parts.push(text(line('-', W) + '\n'));
+  parts.push(rule('-'));
 
   // Total — financial amounts are never truncated
-  parts.push(text(line('=', W) + '\n'));
-  parts.push(align('left'));
+  parts.push(rule('='));
   parts.push(bold(true));
-
   const totalLabel = 'TOTAL';
   const totalText = `Rs.${commas(data.total)}`;
-  const totalSpaces = Math.max(1, SAFE_W - totalLabel.length - totalText.length);
-
-  parts.push(
-    text(
-      totalLabel +
-        ' '.repeat(totalSpaces) +
-        totalText +
-        '\n'
-    )
-  );
+  parts.push(text(totalLabel + ' '.repeat(Math.max(1, SAFE_W - totalLabel.length - totalText.length)) + totalText + '\n'));
   parts.push(bold(false));
-  parts.push(text(line('=', W) + '\n'));
+  parts.push(rule('='));
 
   // Payment
-  parts.push(text('\n'));
-  if (isCash && data.amount_received !== null) {
-    const halfSafe = Math.floor(SAFE_W / 2);
-    parts.push(
-      text(
-        padRight(`Paid: Rs.${commas(data.amount_received)}`, halfSafe) +
-          padLeft(`Change: Rs.${commas(data.change ?? 0)}`, halfSafe) +
-          '\n'
-      )
-    );
-  } else {
-    parts.push(text(`Payment: ${data.payment_method}\n`));
+  if (settings.show_payment) {
+    parts.push(text('\n'));
+    if (isCash && data.amount_received !== null) {
+      const halfSafe = Math.floor(SAFE_W / 2);
+      parts.push(
+        text(
+          padRight(`Paid: Rs.${commas(data.amount_received)}`, halfSafe) +
+            padLeft(`Change: Rs.${commas(data.change ?? 0)}`, halfSafe) +
+            '\n',
+        ),
+      );
+    } else {
+      parts.push(text(`Payment: ${data.payment_method}\n`));
+    }
   }
 
   // Footer
-  parts.push(feedLines(1));
-  parts.push(text(line('-', W) + '\n'));
-  parts.push(feedLines(1));
-  parts.push(align('center'));
-  parts.push(bold(true));
-  parts.push(text('Thank you for visiting!\n'));
-  parts.push(bold(false));
-  parts.push(text(line('=', W) + '\n'));
+  if (settings.footer_text) {
+    parts.push(feedLines(1));
+    parts.push(rule('-'));
+    parts.push(feedLines(1));
+    parts.push(align('center'));
+    parts.push(bold(true));
+    parts.push(text(settings.footer_text + '\n'));
+    parts.push(bold(false));
+  }
+  parts.push(align('left'));
+  parts.push(rule('='));
 
   if (autoCut) {
     parts.push(feedLines(3));
@@ -301,7 +319,7 @@ export function encodeReceipt(data: ReceiptData, options: EncodeReceiptOptions):
     parts.push(feedLines(1));
     parts.push(align('center'));
     parts.push(text('- - - - - -  TEAR HERE  - - - - - -\n'));
-    parts.push(feedLines(TEAR_FEED_LINES));
+    parts.push(feedLines(settings.tear_feed_lines));
   }
 
   return concat(...parts);

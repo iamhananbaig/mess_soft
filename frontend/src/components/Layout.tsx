@@ -32,14 +32,18 @@ import {
   UserMinus,
   Users,
   Shield,
+  Prohibit,
+  Receipt,
 } from '@phosphor-icons/react';
 
-const navItems = [
+const navItems: { path: string; label: string; permission: string | string[]; icon: typeof ShoppingCart }[] = [
   { path: '/', label: 'POS', permission: 'pos:use', icon: ShoppingCart },
   { path: '/menu', label: 'Menu', permission: 'menu:view', icon: ForkKnife },
   { path: '/inventory', label: 'Inventory', permission: 'inventory:view', icon: Package },
   { path: '/reports', label: 'Reports', permission: 'reports:view', icon: ChartBar },
+  { path: '/voids', label: 'Voids', permission: ['sales:void-request', 'sales:void-approve'], icon: Prohibit },
   { path: '/consumptions', label: 'Consumptions', permission: 'consumptions:view', icon: UserMinus },
+  { path: '/receipt-design', label: 'Receipt Design', permission: 'settings:manage', icon: Receipt },
   { path: '/employees', label: 'Employees', permission: 'employees:view', icon: Users },
   { path: '/permissions', label: 'Permissions', permission: 'employees:edit', icon: Shield },
 ];
@@ -49,7 +53,9 @@ export function Layout() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const filteredNav = navItems.filter((item) => hasPermission(item.permission));
+  const filteredNav = navItems.filter((item) =>
+    (Array.isArray(item.permission) ? item.permission : [item.permission]).some(hasPermission),
+  );
 
   const currentPage = navItems.find((item) => item.path === location.pathname);
   const currentPageLabel = currentPage?.label ?? 'Page';

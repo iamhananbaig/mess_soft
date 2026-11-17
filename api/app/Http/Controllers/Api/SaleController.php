@@ -7,6 +7,7 @@ use App\Models\InventoryItem;
 use App\Models\MenuItem;
 use App\Models\Sale;
 use App\Models\SaleItem;
+use App\Models\Setting;
 use App\Models\StockMovement;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -128,7 +129,9 @@ class SaleController extends Controller
             'per_page' => 'sometimes|integer|min:1|max:100',
         ]);
 
-        $query = Sale::with('items.menuItem')->orderByDesc('created_at');
+        $query = Sale::with(['items.menuItem', 'user:id,name'])
+            ->withExists(['voidRequests as has_pending_void' => fn ($q) => $q->where('status', 'pending')])
+            ->orderByDesc('created_at');
 
         if ($validated['from'] ?? null) {
             $query->where('created_at', '>=', $validated['from']);
@@ -154,10 +157,11 @@ class SaleController extends Controller
     public function receipt(Sale $sale): JsonResponse
     {
         $sale->load(['items.menuItem', 'user']);
+        $settings = Setting::receipt();
 
         return response()->json([
-            'canteen_name' => config('app.receipt.canteen_name'),
-            'branch_name' => config('app.receipt.branch_name'),
+            'canteen_name' => $settings['canteen_name'],
+            'branch_name' => $settings['branch_name'],
             'date' => $sale->created_at->timezone('Asia/Karachi')->format('d-M-Y'),
             'time' => $sale->created_at->timezone('Asia/Karachi')->format('h:i A'),
             'receipt_number' => str_pad($sale->id, 6, '0', STR_PAD_LEFT),
@@ -172,6 +176,7 @@ class SaleController extends Controller
             'payment_method' => ucfirst($sale->payment_method),
             'amount_received' => $sale->amount_received,
             'change' => $sale->change,
+            'voided' => $sale->voided_at !== null,
         ]);
     }
 }
