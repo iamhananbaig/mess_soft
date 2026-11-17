@@ -125,6 +125,18 @@ function padLeft(str: string, width: number): string {
   return ' '.repeat(width - str.length) + str;
 }
 
+/**
+ * Left and right text on one line, right-aligned within `width`. If both don't
+ * fit, the right part goes on its own (right-aligned) line — never truncated,
+ * so names, dates and amounts are always printed in full.
+ */
+function twoColumns(left: string, right: string, width: number): string {
+  if (left.length + right.length + 1 <= width) {
+    return left + ' '.repeat(width - left.length - right.length) + right + '\n';
+  }
+  return left + '\n' + padLeft(right, width) + '\n';
+}
+
 function commas(n: number): string {
   return n.toLocaleString('en-US');
 }
@@ -265,16 +277,9 @@ export function encodeReceipt(data: ReceiptData, options: EncodeReceiptOptions):
 
   // Info
   parts.push(align('left'));
-  const halfInfo = Math.floor(SAFE_W / 2);
   const status = reprint ? 'DUPLICATE' : 'ORIGINAL';
-  parts.push(text(padRight(`#${data.receipt_number}`, halfInfo) + padLeft(`${data.date}  ${data.time}`, halfInfo) + '\n'));
-  parts.push(
-    text(
-      settings.show_cashier
-        ? padRight(`Cashier: ${data.cashier}`, halfInfo) + padLeft(status, halfInfo) + '\n'
-        : padLeft(status, halfInfo * 2) + '\n',
-    ),
-  );
+  parts.push(text(twoColumns(`#${data.receipt_number}`, `${data.date}  ${data.time}`, SAFE_W)));
+  parts.push(text(settings.show_cashier ? twoColumns(`Cashier: ${data.cashier}`, status, SAFE_W) : padLeft(status, SAFE_W) + '\n'));
   parts.push(rule('-'));
 
   // Items — the name column absorbs extra width on 80mm paper
@@ -302,14 +307,7 @@ export function encodeReceipt(data: ReceiptData, options: EncodeReceiptOptions):
   if (settings.show_payment) {
     parts.push(text('\n'));
     if (isCash && data.amount_received !== null) {
-      const halfSafe = Math.floor(SAFE_W / 2);
-      parts.push(
-        text(
-          padRight(`Paid: Rs.${commas(data.amount_received)}`, halfSafe) +
-            padLeft(`Change: Rs.${commas(data.change ?? 0)}`, halfSafe) +
-            '\n',
-        ),
-      );
+      parts.push(text(twoColumns(`Paid: Rs.${commas(data.amount_received)}`, `Change: Rs.${commas(data.change ?? 0)}`, SAFE_W)));
     } else {
       parts.push(text(`Paid by: ${data.payment_method}\n`));
       if (data.payment_reference) parts.push(text(`Ref: ${data.payment_reference}\n`));

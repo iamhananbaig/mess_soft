@@ -301,7 +301,7 @@ export function POSPage() {
 
       {/* Menu */}
       <div className="flex-1 flex flex-col min-w-0">
-        <div className="sticky top-12 md:top-16 z-20 bg-background/95 backdrop-blur border-b px-3 py-2 md:p-4 space-y-2">
+        <div className="sticky top-0 z-20 bg-background/95 backdrop-blur border-b px-3 py-2 md:p-4 space-y-2">
           <div className="relative md:max-w-sm">
             <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
             <Input ref={searchRef} placeholder="Search items…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 pr-9 h-10" />
