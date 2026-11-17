@@ -179,7 +179,7 @@ export function ReceiptDesignPage() {
               {form.paper_width === '80' && (
                 <FormField label="Text size">
                   <div className="flex gap-1">
-                    {([['large', 'Large (48 per line)'], ['compact', 'Compact (64 per line)']] as const).map(([v, l]) => (
+                    {([['large', 'Large (42 per line)'], ['compact', 'Compact (56 per line)']] as const).map(([v, l]) => (
                       <Button key={v} type="button" size="sm" variant={(form.text_size ?? 'large') === v ? 'default' : 'outline'} onClick={() => set('text_size', v)}>
                         {l}
                       </Button>

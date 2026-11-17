@@ -35,6 +35,9 @@ export const DEFAULT_ESC_POS_PROFILE: EscPosProfile = {
  */
 const TEAR_FEED_LINES = 4;
 
+/** Printable width used for 80mm paper — safe on both 512- and 576-dot heads. */
+const PRINT_WIDTH_80MM_DOTS = 512;
+
 // ── Helpers ──────────────────────────────────────────────────────────
 
 function concat(...arrays: Uint8Array[]): Uint8Array {
@@ -174,7 +177,7 @@ export interface ReceiptSettings {
   show_cashier: boolean;
   show_payment: boolean;
   paper_width: '58' | '80';
-  /** 80mm only: 'large' = Font A, 48 chars (easier to read); 'compact' = Font B, 64 chars. */
+  /** 80mm only: 'large' = Font A, 42 chars (easier to read); 'compact' = Font B, 56 chars. */
   text_size: 'large' | 'compact';
   tear_feed_lines: number;
 }
@@ -198,9 +201,12 @@ export function profileForPaper(
   textSize: ReceiptSettings['text_size'] = 'large',
 ): EscPosProfile {
   if (width === '80') {
+    // 80mm printers come with a 576- or 512-dot head (the BT600M family ships both).
+    // A line wider than the head crashes some firmware after the first line, so use
+    // 512 dots: it fits either head (a 576-dot head just gets a wider right margin).
     return textSize === 'compact'
-      ? { printWidthDots: 576, columns: 64, font: 'B' } // 576 / 9
-      : { printWidthDots: 576, columns: 48, font: 'A' }; // 576 / 12
+      ? { printWidthDots: PRINT_WIDTH_80MM_DOTS, columns: 56, font: 'B' } // 512 / 9
+      : { printWidthDots: PRINT_WIDTH_80MM_DOTS, columns: 42, font: 'A' }; // 512 / 12
   }
   // 58mm stays on Font B: Font A gives only 32 columns, too narrow for the item table.
   return DEFAULT_ESC_POS_PROFILE;

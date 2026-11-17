@@ -73,4 +73,4 @@ Local dev: `php artisan serve` (:8000) and `npm run dev` (:5173). Docker/prod: s
 - Only the `api` container migrates (`RUN_MIGRATIONS`); don't add services that run the entrypoint's migrate step.
 - Receipt text must never be truncated — use `twoColumns()` in `escpos.ts`.
 - Browser printing needs HTTPS + Chrome/Edge; phones print over Bluetooth Low Energy only.
-- The canteen's printer: **Speed-X BT600M**, 80 mm, Bluetooth + USB. Defaults: 80 mm, large text (Font A, 48 columns), tear-off (no auto-cut).
+- The canteen's printer: **Speed-X BT600M**, 80 mm, Bluetooth + USB. Defaults: 80 mm, large text (Font A, 42 columns on a 512-dot area — sending 576 dots crashed it after one line), tear-off (no auto-cut).
