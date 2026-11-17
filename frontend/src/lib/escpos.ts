@@ -263,8 +263,9 @@ export function encodeReceipt(data: ReceiptData, options: EncodeReceiptOptions):
   const isCash = data.payment_method === 'Cash';
   const W = profile.columns;
   const SAFE_W = W - 3; // leave 3 chars (~27 dots) of right margin
-  // Plain glyphs only: the BT600M hung on full-width separators drawn bold or underlined.
-  const rule = (char: string) => text(line(char, W) + '\n');
+  // Bold so the thin '-'/'=' glyphs stay visible, but only SAFE_W long (like the
+  // bold TOTAL line): a bold or underlined line reaching the right edge hangs the BT600M.
+  const rule = (char: string) => concat(bold(true), text(line(char, SAFE_W) + '\n'), bold(false));
 
   parts.push(initialize());
   parts.push(selectFont(profile.font));
@@ -415,8 +416,9 @@ export function encodeCashClosing(
   const W = profile.columns;
   const SAFE_W = W - 3;
   const parts: Uint8Array[] = [];
-  // Plain glyphs only: the BT600M hung on full-width separators drawn bold or underlined.
-  const rule = (char: string) => text(line(char, W) + '\n');
+  // Bold so the thin '-'/'=' glyphs stay visible, but only SAFE_W long (like the
+  // bold TOTAL line): a bold or underlined line reaching the right edge hangs the BT600M.
+  const rule = (char: string) => concat(bold(true), text(line(char, SAFE_W) + '\n'), bold(false));
   const pair = (label: string, value: string) =>
     text(label + ' '.repeat(Math.max(1, SAFE_W - label.length - value.length)) + value + '\n');
 
