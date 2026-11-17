@@ -150,13 +150,13 @@ export function EmployeesPage() {
 
   return (
     <TooltipProvider>
-    <div className="flex flex-col gap-6 p-4 sm:p-6">
+    <div className="flex flex-col gap-4 md:gap-6 p-3 sm:p-6">
       <PageHeader
         title="Employee Management"
         description="Manage staff accounts and roles"
         action={canEdit && (
           <Button onClick={() => setCreateOpen(true)} className="bg-accent hover:bg-accent/90 text-accent-foreground">
-            <Plus className="size-4 mr-1" /> Add Employee
+            <Plus className="size-4 sm:mr-1" /><span className="hidden sm:inline">Add Employee</span>
           </Button>
         )}
       />
@@ -164,6 +164,36 @@ export function EmployeesPage() {
       {loading ? <TableSkeleton columns={5} /> : filtered.length === 0 ? (
         <EmptyState title={search ? 'No employees match your search' : 'No employees found'} description={search ? 'Try a different search term' : 'Add your first employee'} />
       ) : (
+        <>
+        {/* Phone: cards with full-width actions */}
+        <ul className="md:hidden space-y-2">
+          {filtered.map((emp) => (
+            <li key={emp.id} className={`rounded-xl border bg-card p-3 space-y-2 ${emp.is_active ? '' : 'opacity-70'}`}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="font-medium truncate">{emp.name}</div>
+                  <div className="text-xs text-muted-foreground truncate">{emp.email}</div>
+                </div>
+                <StatusBadge status={emp.is_active ? 'Active' : 'Inactive'} />
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {emp.roles.length ? emp.roles.map((r) => <StatusBadge key={r.name} status={r.name} />) : <StatusBadge status="none" />}
+              </div>
+              {canEdit && (
+                <div className="grid grid-cols-3 gap-2">
+                  <Button variant="outline" size="sm" className="h-9" onClick={() => openEdit(emp)}><PencilSimple className="size-4 mr-1" />Edit</Button>
+                  <Button variant="outline" size="sm" className="h-9" onClick={() => toggleActive(emp)} disabled={submitLoading}>
+                    {emp.is_active ? <><UserMinus className="size-4 mr-1" />Disable</> : <><UserPlus className="size-4 mr-1" />Enable</>}
+                  </Button>
+                  {emp.id !== user?.id && (
+                    <Button variant="outline" size="sm" className="h-9" onClick={() => { setNewPassword(''); setResetFor(emp); }}><Key className="size-4 mr-1" />Password</Button>
+                  )}
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+        <div className="hidden md:block">
         <Table>
           <TableHeader>
             <TableRow>
@@ -204,6 +234,8 @@ export function EmployeesPage() {
             ))}
           </TableBody>
         </Table>
+        </div>
+        </>
       )}
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>

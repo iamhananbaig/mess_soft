@@ -17,7 +17,8 @@ import { DatePicker } from '@/components/DatePicker';
 import { ReceiptModal } from '@/components/ReceiptModal';
 import { PrintDialog } from '@/components/PrintDialog';
 import { ExportMenu } from '@/components/ExportMenu';
-import { FilterSelect, DateRangeFilter, useFilterOptions, type DateRange } from '@/components/ReportFilters';
+import { FilterSelect, DateRangeFilter, type DateRange } from '@/components/ReportFilters';
+import { useFilterOptions } from '@/hooks/useFilterOptions';
 import { ArrowClockwise, Printer } from '@phosphor-icons/react';
 import type { ReceiptData as FullReceiptData } from '@/types/receipt';
 

@@ -20,6 +20,8 @@ const PermissionsPage = lazy(() => import('@/pages/PermissionsPage').then((m) =>
 const VoidsPage = lazy(() => import('@/pages/VoidsPage').then((m) => ({ default: m.VoidsPage })));
 const ReceiptDesignPage = lazy(() => import('@/pages/ReceiptDesignPage').then((m) => ({ default: m.ReceiptDesignPage })));
 const CashClosingPage = lazy(() => import('@/pages/CashClosingPage').then((m) => ({ default: m.CashClosingPage })));
+const DashboardPage = lazy(() => import('@/pages/DashboardPage').then((m) => ({ default: m.DashboardPage })));
+const ActivityPage = lazy(() => import('@/pages/ActivityPage').then((m) => ({ default: m.ActivityPage })));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage').then((m) => ({ default: m.NotFoundPage })));
 
 export default function App() {
@@ -46,6 +48,8 @@ export default function App() {
                 <Route path="voids" element={<RequirePermission path="/voids"><Suspense fallback={<PageSpinner />}><VoidsPage /></Suspense></RequirePermission>} />
                 <Route path="receipt-design" element={<RequirePermission path="/receipt-design"><Suspense fallback={<PageSpinner />}><ReceiptDesignPage /></Suspense></RequirePermission>} />
                 <Route path="cash-closing" element={<RequirePermission path="/cash-closing"><Suspense fallback={<PageSpinner />}><CashClosingPage /></Suspense></RequirePermission>} />
+                <Route path="dashboard" element={<RequirePermission path="/dashboard"><Suspense fallback={<PageSpinner />}><DashboardPage /></Suspense></RequirePermission>} />
+                <Route path="activity" element={<RequirePermission path="/activity"><Suspense fallback={<PageSpinner />}><ActivityPage /></Suspense></RequirePermission>} />
                 <Route path="employees" element={<RequirePermission path="/employees"><Suspense fallback={<PageSpinner />}><EmployeesPage /></Suspense></RequirePermission>} />
                 <Route path="permissions" element={<RequirePermission path="/permissions"><Suspense fallback={<PageSpinner />}><PermissionsPage /></Suspense></RequirePermission>} />
                 <Route path="*" element={<Suspense fallback={<PageSpinner />}><NotFoundPage /></Suspense>} />

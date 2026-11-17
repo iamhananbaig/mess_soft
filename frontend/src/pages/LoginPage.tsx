@@ -23,8 +23,9 @@ export function LoginPage() {
     setLoading(true);
 
     try {
-      await login(email, password);
-      navigate('/');
+      const user = await login(email, password);
+      // Managers/admins start on the dashboard; counter staff go straight to the POS.
+      navigate(user.permissions.includes('reports:view') ? '/dashboard' : '/');
     } catch (err: unknown) {
       const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Login failed';
       setError(message);

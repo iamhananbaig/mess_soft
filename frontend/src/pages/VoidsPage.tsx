@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Spinner } from '@/components/ui/spinner';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { PageHeader } from '@/components/PageHeader';
@@ -137,7 +136,7 @@ export function VoidsPage() {
   };
 
   return (
-    <div className="flex flex-col gap-6 p-4 sm:p-6">
+    <div className="flex flex-col gap-4 md:gap-6 p-3 sm:p-6">
       <PageHeader
         title="Voids"
         description={canApprove ? 'Review void requests and request voids for sales' : 'Request a void for a sale — a manager must approve it'}
@@ -164,58 +163,37 @@ export function VoidsPage() {
               description={canRequest ? 'Request a void from the Sales tab' : undefined}
             />
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Sale</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Reason</TableHead>
-                  <TableHead>Requested</TableHead>
-                  <TableHead>Status</TableHead>
-                  {canApprove && <TableHead className="w-48">Actions</TableHead>}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {requests.map((r) => {
-                  return (
-                    <TableRow key={r.id}>
-                      <TableCell>
-                        <div className="font-medium">#{r.sale_id}</div>
-                        <div className="text-xs text-muted-foreground max-w-56 truncate">{r.sale ? itemsSummary(r.sale.items) : ''}</div>
-                      </TableCell>
-                      <TableCell>{r.sale ? formatPKR(r.sale.total_amount) : '—'}</TableCell>
-                      <TableCell className="max-w-56">{r.reason}</TableCell>
-                      <TableCell>
-                        <div>{r.requester?.name}</div>
-                        <div className="text-xs text-muted-foreground">{formatDateTime(r.created_at)}</div>
-                      </TableCell>
-                      <TableCell>
+            <ul className="space-y-2">
+              {requests.map((r) => (
+                <li key={r.id} className="rounded-xl border bg-card p-3 space-y-2">
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold">Sale #{r.sale_id}</span>
                         <StatusBadge status={r.status} />
-                        {r.reviewer && (
-                          <div className="text-xs text-muted-foreground mt-1">
-                            by {r.reviewer.name}{r.review_note ? ` — ${r.review_note}` : ''}
-                          </div>
-                        )}
-                      </TableCell>
-                      {canApprove && (
-                        <TableCell>
-                          {r.status === 'pending' && (
-                            <div className="flex gap-1">
-                              <Button size="sm" variant="destructive" onClick={() => { setNote(''); setReview({ request: r, action: 'approve' }); }}>
-                                <Check className="size-4 mr-1" /> Approve
-                              </Button>
-                              <Button size="sm" variant="outline" onClick={() => { setNote(''); setReview({ request: r, action: 'reject' }); }}>
-                                <X className="size-4 mr-1" /> Reject
-                              </Button>
-                            </div>
-                          )}
-                        </TableCell>
-                      )}
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                      </div>
+                      <div className="text-xs text-muted-foreground truncate">{r.sale ? itemsSummary(r.sale.items) : ''}</div>
+                    </div>
+                    <span className="font-semibold tabular-nums">{r.sale ? formatPKR(r.sale.total_amount) : '—'}</span>
+                  </div>
+                  <p className="text-sm">“{r.reason}”</p>
+                  <div className="text-xs text-muted-foreground">
+                    Requested by {r.requester?.name} · {formatDateTime(r.created_at)}
+                    {r.reviewer && <> · {r.status} by {r.reviewer.name}{r.review_note ? ` — ${r.review_note}` : ''}</>}
+                  </div>
+                  {canApprove && r.status === 'pending' && (
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      <Button variant="destructive" className="h-10" onClick={() => { setNote(''); setReview({ request: r, action: 'approve' }); }}>
+                        <Check className="size-4 mr-1" /> Approve
+                      </Button>
+                      <Button variant="outline" className="h-10" onClick={() => { setNote(''); setReview({ request: r, action: 'reject' }); }}>
+                        <X className="size-4 mr-1" /> Reject
+                      </Button>
+                    </div>
+                  )}
+                </li>
+              ))}
+            </ul>
           )}
         </TabsContent>
 
@@ -225,36 +203,26 @@ export function VoidsPage() {
             {loading ? <TableSkeleton columns={6} /> : sales.length === 0 ? (
               <EmptyState title="No sales on this date" />
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Sale</TableHead>
-                    <TableHead>Time</TableHead>
-                    <TableHead>Cashier</TableHead>
-                    <TableHead>Items</TableHead>
-                    <TableHead>Total</TableHead>
-                    <TableHead className="w-40"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sales.map((s) => (
-                    <TableRow key={s.id} className={s.voided_at ? 'opacity-60' : ''}>
-                      <TableCell className="font-medium">#{s.id}</TableCell>
-                      <TableCell>{formatDateTime(s.created_at)}</TableCell>
-                      <TableCell>{s.user?.name}</TableCell>
-                      <TableCell className="max-w-64 truncate">{itemsSummary(s.items)}</TableCell>
-                      <TableCell className={s.voided_at ? 'line-through' : ''}>{formatPKR(s.total_amount)}</TableCell>
-                      <TableCell>
-                        {saleStatus(s) ?? (
-                          <Button size="sm" variant="outline" onClick={() => { setReason(''); setRequestSale(s); }}>
-                            <Prohibit className="size-4 mr-1" /> Request void
-                          </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <ul className="space-y-2">
+                {sales.map((s) => (
+                  <li key={s.id} className={`rounded-xl border bg-card p-3 ${s.voided_at ? 'opacity-60' : ''}`}>
+                    <div className="flex items-start gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold">#{s.id} <span className="text-xs font-normal text-muted-foreground">{formatDateTime(s.created_at)}{s.user?.name && ` · ${s.user.name}`}</span></div>
+                        <div className="text-sm text-muted-foreground truncate">{itemsSummary(s.items)}</div>
+                      </div>
+                      <span className={`font-semibold tabular-nums ${s.voided_at ? 'line-through' : ''}`}>{formatPKR(s.total_amount)}</span>
+                    </div>
+                    <div className="mt-2">
+                      {saleStatus(s) ?? (
+                        <Button size="sm" variant="outline" className="h-9 w-full sm:w-auto" onClick={() => { setReason(''); setRequestSale(s); }}>
+                          <Prohibit className="size-4 mr-1" /> Request void
+                        </Button>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
             )}
           </TabsContent>
         )}

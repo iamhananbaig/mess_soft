@@ -143,3 +143,15 @@ button,
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
+
+/* Chart colours (validated: categorical slots 1–2 pass CVD / contrast checks in both themes). */
+.viz-root {
+  --series-revenue: #2a78d6;
+  --series-profit: #eb6834;
+  --viz-grid: color-mix(in oklab, var(--foreground) 10%, transparent);
+  --viz-axis: color-mix(in oklab, var(--foreground) 55%, transparent);
+}
+.dark .viz-root {
+  --series-revenue: #3987e5;
+  --series-profit: #d95926;
+}

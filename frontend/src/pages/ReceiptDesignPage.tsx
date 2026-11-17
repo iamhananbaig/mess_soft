@@ -17,6 +17,7 @@ import { FormField } from '@/components/FormField';
 import { PageSpinner } from '@/components/PageSpinner';
 import { SlipPreview } from '@/components/SlipPreview';
 import { Printer } from '@phosphor-icons/react';
+import { PaymentMethodsCard } from '@/components/PaymentMethodsCard';
 
 const SAMPLE: ReceiptData = {
   canteen_name: '',
@@ -113,8 +114,8 @@ export function ReceiptDesignPage() {
   return (
     <div className="flex flex-col gap-6 p-4 sm:p-6">
       <PageHeader
-        title="Receipt Design"
-        description="Customize the printed slip. The preview shows exactly what the printer receives."
+        title="Settings"
+        description="Receipt layout, printer paper and payment methods. The preview shows exactly what the printer receives."
         action={canEdit && (
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setForm(saved)} disabled={!dirty || saving}>Discard</Button>
@@ -175,6 +176,18 @@ export function ReceiptDesignPage() {
                   ))}
                 </div>
               </FormField>
+              {form.paper_width === '80' && (
+                <FormField label="Text size">
+                  <div className="flex gap-1">
+                    {([['large', 'Large (48 per line)'], ['compact', 'Compact (64 per line)']] as const).map(([v, l]) => (
+                      <Button key={v} type="button" size="sm" variant={(form.text_size ?? 'large') === v ? 'default' : 'outline'} onClick={() => set('text_size', v)}>
+                        {l}
+                      </Button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Large is easier to read; compact fits longer item names.</p>
+                </FormField>
+              )}
               <FormField label="Blank lines after the tear line (no-cutter printers)">
                 <Input
                   type="number"
@@ -189,6 +202,7 @@ export function ReceiptDesignPage() {
             </CardContent>
           </Card>
           {!canEdit && <p className="text-sm text-muted-foreground">You can view the design, but only an admin can change it.</p>}
+          <PaymentMethodsCard canEdit={canEdit} />
         </fieldset>
 
         {/* Live preview */}
