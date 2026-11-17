@@ -472,6 +472,15 @@ class PrinterService {
       settings,
     }: { copies?: ReceiptCopy[]; reprint?: boolean; settings?: Partial<ReceiptSettings> } = {},
   ) {
+    // All copies go in one job so they come out back-to-back, each cut separately.
+    await this.printDocument(encodeReceiptCopies(data, copies, { reprint, autoCut: this.autoCut, settings }));
+  }
+
+  /**
+   * Send an already-encoded ESC/POS document (receipt, closing slip…),
+   * reconnecting first if the link dropped. Never retries automatically.
+   */
+  async printDocument(bytes: Uint8Array) {
     if (!this.config.type) {
       throw new Error('No printer set up. Connect one via USB or Bluetooth first.');
     }
@@ -481,8 +490,7 @@ class PrinterService {
       );
     }
     try {
-      // All copies go in one job so they come out back-to-back, each cut separately.
-      await this.print(encodeReceiptCopies(data, copies, { reprint, autoCut: this.autoCut, settings }));
+      await this.print(bytes);
     } catch (err) {
       console.error('Direct printer communication failed:', err);
       throw new Error(

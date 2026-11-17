@@ -189,6 +189,16 @@ Any authenticated user. Returns user + roles + permissions.
 - Approve: in one transaction, returns exactly the stock the sale consumed (from its `source=sale` movements, as `source=void` movements) and sets `sales.voided_at`.
 - Voided sales are excluded from `/reports/daily` and `/reports/items`; `/reports/daily` adds `voided_count`, `voided_amount`; `/reports/receipts` flags `is_voided`; `/sales/{id}/receipt` adds `voided`; `/reports/stock-summary` adds `void_returns`.
 
+## Cash Closing (per cashier, per day)
+
+| Method | Endpoint | Permission |
+|---|---|---|
+| GET | `/cash-closing?date=YYYY-MM-DD` | `reports:view` or `cash:close` |
+| POST | `/cash-closing` | `cash:close` (manager, admin, super-admin) |
+
+- GET returns per-cashier live figures (`sales_count` = non-voided sales, `gross_amount`, `voided_count`, `voided_amount`, `expected_cash` = gross − voided, `pending_voids`), the recorded `closing` (or null), `changed_since_close`, and day `totals`.
+- POST body: `{ date, user_id, counted_cash, note? }`. Snapshots the figures and stores `variance = counted − expected` (negative = short). One closing per cashier per day, final once saved; refused while that cashier has pending void requests for the day; no future dates.
+
 ## Receipt Settings
 
 | Method | Endpoint | Permission |

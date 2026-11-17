@@ -34,6 +34,7 @@ import {
   Shield,
   Prohibit,
   Receipt,
+  Vault,
 } from '@phosphor-icons/react';
 
 const navItems: { path: string; label: string; permission: string | string[]; icon: typeof ShoppingCart }[] = [
@@ -41,6 +42,7 @@ const navItems: { path: string; label: string; permission: string | string[]; ic
   { path: '/menu', label: 'Menu', permission: 'menu:view', icon: ForkKnife },
   { path: '/inventory', label: 'Inventory', permission: 'inventory:view', icon: Package },
   { path: '/reports', label: 'Reports', permission: 'reports:view', icon: ChartBar },
+  { path: '/cash-closing', label: 'Cash Closing', permission: ['cash:close', 'reports:view'], icon: Vault },
   { path: '/voids', label: 'Voids', permission: ['sales:void-request', 'sales:void-approve'], icon: Prohibit },
   { path: '/consumptions', label: 'Consumptions', permission: 'consumptions:view', icon: UserMinus },
   { path: '/receipt-design', label: 'Receipt Design', permission: 'settings:manage', icon: Receipt },

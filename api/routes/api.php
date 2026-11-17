@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\CashClosingController;
 use App\Http\Controllers\Api\CategoryController;
 use App\Http\Controllers\Api\EmployeeController;
 use App\Http\Controllers\Api\InventoryController;
@@ -99,6 +100,11 @@ Route::prefix('v1')->group(function () {
         Route::middleware('permission:consumptions:view')->group(function () {
             Route::get('/consumptions', [ManualConsumptionController::class, 'index']);
         });
+
+        Route::get('/cash-closing', [CashClosingController::class, 'show'])
+            ->middleware('permission:reports:view|cash:close');
+        Route::post('/cash-closing', [CashClosingController::class, 'store'])
+            ->middleware('permission:cash:close');
 
         Route::middleware('permission:reports:view')->group(function () {
             Route::get('/reports/daily', [ReportController::class, 'daily']);

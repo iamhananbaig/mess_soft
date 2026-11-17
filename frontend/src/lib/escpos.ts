@@ -324,3 +324,94 @@ export function encodeReceipt(data: ReceiptData, options: EncodeReceiptOptions):
 
   return concat(...parts);
 }
+
+// ── Cash closing slip ────────────────────────────────────────────────
+
+export interface CashClosingSlipRow {
+  name: string;
+  sales_count: number;
+  voided_count: number;
+  voided_amount: number;
+  expected_cash: number;
+  counted_cash: number | null;
+  variance: number | null;
+  closed_by: string | null;
+  note: string | null;
+}
+
+export interface CashClosingSlipData {
+  date: string;
+  printed_at: string;
+  printed_by: string;
+  rows: CashClosingSlipRow[];
+}
+
+function signedRs(n: number): string {
+  if (n === 0) return 'Rs.0 (balanced)';
+  return n < 0 ? `-Rs.${commas(-n)} (SHORT)` : `+Rs.${commas(n)} (EXCESS)`;
+}
+
+/** Day-end cash closing slip: one block per cashier drawer plus day totals. */
+export function encodeCashClosing(
+  data: CashClosingSlipData,
+  options: { autoCut?: boolean; settings?: Partial<ReceiptSettings> } = {},
+): Uint8Array {
+  const settings: ReceiptSettings = { ...DEFAULT_RECEIPT_SETTINGS, ...options.settings };
+  const W = profileForPaper(settings.paper_width).fontBColumns;
+  const SAFE_W = W - 3;
+  const parts: Uint8Array[] = [];
+  const rule = (char: string) => text(line(char, W) + '\n');
+  const pair = (label: string, value: string) =>
+    text(label + ' '.repeat(Math.max(1, SAFE_W - label.length - value.length)) + value + '\n');
+
+  parts.push(initialize(), selectFontB(), setPrintWidth(profileForPaper(settings.paper_width).printWidthDots));
+
+  parts.push(align('center'), bold(true));
+  if (settings.canteen_name) parts.push(text(settings.canteen_name + '\n'));
+  parts.push(doubleWidth(true), text('CASH CLOSING\n'), doubleWidth(false), bold(false));
+  parts.push(text(`Date: ${data.date}\n`));
+  parts.push(rule('='));
+  parts.push(align('left'));
+
+  for (const row of data.rows) {
+    parts.push(bold(true), text(row.name + '\n'), bold(false));
+    parts.push(pair('Sales', String(row.sales_count)));
+    if (row.voided_count > 0) parts.push(pair(`Voids (${row.voided_count})`, `-Rs.${commas(row.voided_amount)}`));
+    parts.push(pair('Expected cash', `Rs.${commas(row.expected_cash)}`));
+    if (row.counted_cash === null) {
+      parts.push(pair('Counted cash', 'NOT CLOSED'));
+    } else {
+      parts.push(pair('Counted cash', `Rs.${commas(row.counted_cash)}`));
+      parts.push(bold(true), pair('Difference', signedRs(row.variance ?? 0)), bold(false));
+      if (row.closed_by) parts.push(text(`Closed by: ${row.closed_by}\n`));
+      if (row.note) parts.push(text(`Note: ${row.note}\n`));
+    }
+    parts.push(rule('-'));
+  }
+
+  const closed = data.rows.filter((r) => r.counted_cash !== null);
+  const total = (f: (r: CashClosingSlipRow) => number) => data.rows.reduce((s, r) => s + f(r), 0);
+  parts.push(bold(true), text('DAY TOTAL\n'), bold(false));
+  parts.push(pair('Sales', String(total((r) => r.sales_count))));
+  parts.push(pair('Voids', `-Rs.${commas(total((r) => r.voided_amount))}`));
+  parts.push(bold(true), pair('Expected cash', `Rs.${commas(total((r) => r.expected_cash))}`), bold(false));
+  parts.push(pair('Counted cash', `Rs.${commas(closed.reduce((s, r) => s + (r.counted_cash ?? 0), 0))}`));
+  parts.push(bold(true), pair('Difference', signedRs(closed.reduce((s, r) => s + (r.variance ?? 0), 0))), bold(false));
+  if (closed.length < data.rows.length) {
+    parts.push(text(`${data.rows.length - closed.length} drawer(s) not closed yet\n`));
+  }
+  parts.push(rule('='));
+
+  parts.push(text(`Printed ${data.printed_at} by ${data.printed_by}\n`));
+  parts.push(feedLines(2));
+  parts.push(text('Cashier sign: ______________\n\n'));
+  parts.push(text('Manager sign: ______________\n'));
+
+  if (options.autoCut) {
+    parts.push(feedLines(3), cut('partial'));
+  } else {
+    parts.push(feedLines(1), align('center'), text('- - - - - -  TEAR HERE  - - - - - -\n'), feedLines(settings.tear_feed_lines));
+  }
+
+  return concat(...parts);
+}
