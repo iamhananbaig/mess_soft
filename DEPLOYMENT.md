@@ -85,7 +85,9 @@ printing in the browser.
 
 ---
 
-## Updating
+## Updating (routine)
+
+For normal updates after the one-time upgrade below.
 
 ```bash
 cd /opt/mess_soft
@@ -99,49 +101,132 @@ Migrations run automatically on start. All migrations are reversible; to roll ba
 code, check out the previous commit and run the same `up` command (restore the backup
 if a migration must be undone).
 
-## One-time: moving from the bundled MySQL container
+## Upgrading the live VM to this version (one-time)
 
-Older versions of this stack ran their own `db` container (data in the Docker volume
-`mess-soft_mysql-data`). Copy the data into native MySQL **once**, outside canteen
-hours. Nothing is deleted — the old volume stays as a fallback.
+The VM still runs the **old stack** (`api`, `queue`, `scheduler`, `db` containers, data
+in the Docker volume `mess-soft_mysql-data`, `.env.docker.local` tracked in git). This
+version changes three things that need care — follow the steps in order.
 
-> `.env.docker.local` used to be committed (with real secrets). Pulling the current
-> version **deletes it from the VM's checkout** — copy it aside first. Because the old
-> values are in git history, use a **new** `DB_PASSWORD` and `APP_KEY` (safe to change:
-> sign-ins use API tokens, which don't depend on the key).
+| What changes | Why it matters |
+|---|---|
+| Data moves to the VM's **native MySQL** (no `db` container) | Must be copied once; the old volume stays as a fallback |
+| `.env.docker.local` is **no longer in git** | `git pull` **deletes it** from the VM — save a copy first |
+| 9 new migrations (voids, settings, cash closing, FK protection, costs & reorder levels, payment methods, opening float, activity log) | They run automatically on start — back up first |
+
+**Plan ~30 minutes outside canteen hours.** Sales can't be taken between step 3 and step 9.
+
+### Before you start
+
+- [ ] SSH access to the VM and the MySQL **root** password
+- [ ] At least one person's login that has the **super-admin** role on prod
+      (admins can no longer grant super-admin — check on the Employees page)
+- [ ] The site's HTTPS address in Nginx Proxy Manager (printing needs HTTPS)
+
+### Steps
 
 ```bash
-cd /opt/mess_soft
+cd /opt/mess_soft                         # wherever the repo is on the VM
+git log --oneline -1                      # note this commit — it's your rollback point
 
-# 1. Keep the env file safe from `git pull`
+# 1. Save the env file (git pull would delete it)
 cp .env.docker.local ~/mess_soft.env.docker.local.bak
 
-# 2. Stop sales, keep the old db container running
-docker compose stop nginx api
-
-# 3. Dump from the OLD db container
+# 2. Full backup of the current data, while everything is still running
 docker exec mess-soft-db-1 sh -c 'exec mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" \
   --single-transaction --routines --triggers --no-tablespaces --set-gtid-purged=OFF "$MYSQL_DATABASE"' \
-  > ~/mess_soft_from_container.sql
-tail -1 ~/mess_soft_from_container.sql          # must say "-- Dump completed"
+  > ~/mess_soft_before_upgrade.sql
+tail -1 ~/mess_soft_before_upgrade.sql                # must say "-- Dump completed"
 
-# 4. Create the database + user (First install, step 2), then import
-mysql -u root -p mess_soft < ~/mess_soft_from_container.sql
+# 3. Stop taking sales (the old db container keeps running)
+docker compose --env-file .env.docker.local stop nginx api queue scheduler
 
-# 5. Counts must match exactly
+# 4. Final dump now that nothing is writing
+docker exec mess-soft-db-1 sh -c 'exec mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" \
+  --single-transaction --routines --triggers --no-tablespaces --set-gtid-purged=OFF "$MYSQL_DATABASE"' \
+  > ~/mess_soft_final.sql
+tail -1 ~/mess_soft_final.sql                         # "-- Dump completed"
+
+# 5. Create the database + user in native MySQL (NEW password — the old one is in git history)
+sudo mysql -e "CREATE DATABASE mess_soft CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+  CREATE USER 'mess_user'@'localhost' IDENTIFIED BY 'NEW_STRONG_PASSWORD';
+  GRANT ALL ON mess_soft.* TO 'mess_user'@'localhost';"
+sudo mysql mess_soft < ~/mess_soft_final.sql
+
+# 6. Counts must match exactly (old container vs native)
 docker exec mess-soft-db-1 sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -N -e "select count(*) from sales; select count(*) from users; select max(id) from sales" "$MYSQL_DATABASE"'
-mysql -u root -p -N -e "select count(*) from sales; select count(*) from users; select max(id) from sales" mess_soft
+sudo mysql -N -e "select count(*) from sales; select count(*) from users; select max(id) from sales" mess_soft
+sudo mysql -N -e "select @@socket"                    # note the socket path for step 8
 
-# 6. Pull, restore + edit the env file (First install, step 3), deploy
+# 7. Get the new code; put the env file back
 git pull
 [ -f .env.docker.local ] || cp ~/mess_soft.env.docker.local.bak .env.docker.local
-docker compose --env-file .env.docker.local up -d --build --remove-orphans
-docker compose logs api | tail -30
+chmod 600 .env.docker.local
 ```
 
-Then sign in, check today's sales and a reprint. `--remove-orphans` removes the old
-`db`, `queue` and `scheduler` containers but **not** the volume. After a few good days:
-`docker volume rm mess-soft_mysql-data`.
+**8. Edit `.env.docker.local`** — compare with the template `.env.docker`:
+
+| Setting | New value |
+|---|---|
+| `APP_KEY` | new: `base64:$(openssl rand -base64 32)` (the old one is in git history; safe to change — sign-ins use API tokens) |
+| `MYSQL_SOCKET_DIR` | directory of the socket from step 6, e.g. `/var/run/mysqld` |
+| `DB_SOCKET` | `/var/run/mysqld/mysqld.sock` (RHEL: `/var/run/mysqld/mysql.sock`) |
+| `DB_HOST` | `localhost` (was `db`) |
+| `DB_PASSWORD` | the new password from step 5 |
+| `QUEUE_CONNECTION` | `sync` (was `database`) |
+| `RUN_MIGRATIONS` | `true` |
+| `MYSQL_ROOT_PASSWORD`, `MYSQL_DATABASE`, `MYSQL_USER`, `MYSQL_PASSWORD` | delete (only the old `db` container used them) |
+
+```bash
+# 9. Start the new stack; --remove-orphans removes the old db/queue/scheduler containers (NOT the data volume)
+docker compose --env-file .env.docker.local up -d --build --remove-orphans
+docker compose logs api | tail -40
+#    expect: "MySQL is ready." → 9 migrations DONE → "Seeding roles and permissions" → Octane started
+docker compose ps                                     # api healthy, nginx up
+curl -s -o /dev/null -w "%{http_code}\n" https://YOUR_SITE/up    # 200
+```
+
+### Check it works
+
+- [ ] Sign in as super-admin → **Dashboard** opens; yesterday's figures look right
+- [ ] **Reports → Receipts** for a recent day matches what you expect; reprint one
+- [ ] **Permissions** → edit *manager*: the **Voids** and **Cash closing** groups are there
+- [ ] Make one test sale on a phone, print it, then request + approve a void for it
+
+### Every phone and PC: refresh once
+
+Old versions told browsers they could keep the app cached, so devices may still show
+the **old app** after this upgrade. Once, on every device: open the site and
+**hard-refresh** (PC: `Ctrl+Shift+R`; phone: close the tab and reopen, or clear the
+site's data in browser settings). Future updates appear without this.
+
+### Set up the new features
+
+1. **Settings** — canteen name and header lines; paper **80 mm**, text **Large**; switch on the payment methods you accept (Card, JazzCash, Easypaisa…).
+2. **Inventory** — for each item: **Edit** → cost per unit and reorder level. Until then profit shows as 100% and low-stock alerts are off.
+3. **Employees** — check roles; give managers the *manager* role so they can approve voids and close cash. A user can have several roles.
+4. **Printer** — from a sale's print dialog: connect USB or Bluetooth; tick **auto-cutter** only if the printer cuts.
+5. **Backups** — install `deploy/backup.sh` (see [Backups](#backups)). Do this today — there was no backup before.
+
+### If something goes wrong (rollback)
+
+The old data volume is untouched, so you can go back to exactly where you were:
+
+```bash
+docker compose --env-file .env.docker.local down
+git checkout <commit noted at the start>
+cp ~/mess_soft.env.docker.local.bak .env.docker.local
+docker compose --env-file .env.docker.local up -d --build
+```
+
+Sales made **after** step 9 exist only in native MySQL — note them before rolling back.
+
+### After a few good days
+
+```bash
+docker volume rm mess-soft_mysql-data          # the old copy
+rm ~/mess_soft.env.docker.local.bak            # holds old secrets
+# keep ~/mess_soft_before_upgrade.sql somewhere safe (off the VM), then delete it here
+```
 
 ---
 
