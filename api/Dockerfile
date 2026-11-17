@@ -5,9 +5,11 @@ RUN composer install --no-dev --optimize-autoloader --no-interaction --no-script
 COPY api/ .
 
 FROM dunglas/frankenphp:1-php8.4
+# Extensions first: compiling them (gd, zip) takes minutes, and this layer stays
+# cached as long as it comes before the app code, which changes every deploy.
+RUN install-php-extensions pcntl pdo_mysql mbstring bcmath gd zip
 WORKDIR /app
 COPY --from=build /app /app
-RUN install-php-extensions pcntl pdo_mysql mbstring bcmath gd zip
 RUN rm -f bootstrap/cache/packages.php bootstrap/cache/services.php
 RUN chown -R www-data:www-data storage bootstrap/cache
 COPY api/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
