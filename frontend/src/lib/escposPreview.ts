@@ -9,6 +9,8 @@ export interface PreviewRun {
   w: number;
   /** Character height multiplier (1–8). */
   h: number;
+  /** Font of this run; may differ from the slip's body font (e.g. headings). */
+  font: 'A' | 'B';
 }
 
 export type PreviewLine =
@@ -42,8 +44,8 @@ export function interpretEscPos(data: Uint8Array): SlipPreviewModel {
     const text = decoder.decode(new Uint8Array(pending));
     pending = [];
     const last = runs[runs.length - 1];
-    if (last && last.bold === bold && last.w === w && last.h === h) last.text += text;
-    else runs.push({ text, bold, w, h });
+    if (last && last.bold === bold && last.w === w && last.h === h && last.font === font) last.text += text;
+    else runs.push({ text, bold, w, h, font });
   };
   const endLine = () => {
     flushText();

@@ -127,6 +127,10 @@ export function doubleSize(on: boolean): Uint8Array {
   return bytes(0x1d, 0x21, on ? 0x11 : 0x00); // GS ! n (double width + height)
 }
 
+export function doubleHeight(on: boolean): Uint8Array {
+  return bytes(0x1d, 0x21, on ? 0x01 : 0x00); // GS ! n (double height only — same width)
+}
+
 export function newline(): Uint8Array {
   return bytes(0x0a); // LF
 }
@@ -170,6 +174,46 @@ function commas(n: number): string {
 
 function line(char: string, width: number): string {
   return char.repeat(width);
+}
+
+/** Word-wrap to `width`; a word longer than a whole line is split. Never drops text. */
+function wrap(str: string, width: number): string[] {
+  const lines: string[] = [];
+  let current = '';
+  for (let word of str.trim().split(/\s+/)) {
+    while (word.length > width) {
+      if (current) { lines.push(current); current = ''; }
+      lines.push(word.slice(0, width));
+      word = word.slice(width);
+    }
+    if (!word) continue;
+    if (!current) current = word;
+    else if (current.length + 1 + word.length <= width) current += ' ' + word;
+    else { lines.push(current); current = word; }
+  }
+  if (current || lines.length === 0) lines.push(current);
+  return lines;
+}
+
+/**
+ * Centred bold heading in Font A — larger than the compact body — and double
+ * width when it fits. Bold text is kept 3 characters short of the right edge
+ * (the BT600M drops or hangs on bold text that reaches it); a heading too long
+ * for Font A falls back to the body font, wrapped, never truncated.
+ * Leaves alignment centred and restores the body font.
+ */
+function heading(str: string, profile: EscPosProfile): Uint8Array {
+  const safeA = columnsFor(profile.printWidthDots, 'A') - 3;
+  const parts: Uint8Array[] = [align('center'), bold(true)];
+  if (str.length * 2 <= safeA) {
+    parts.push(selectFontA(), doubleWidth(true), text(str + '\n'), doubleWidth(false));
+  } else if (str.length <= safeA) {
+    parts.push(selectFontA(), text(str + '\n'));
+  } else {
+    parts.push(selectFont(profile.font), text(wrap(str, profile.columns - 3).join('\n') + '\n'));
+  }
+  parts.push(bold(false), selectFont(profile.font));
+  return concat(...parts);
 }
 
 // ── Receipt settings ─────────────────────────────────────────────────
@@ -272,17 +316,7 @@ export function encodeReceipt(data: ReceiptData, options: EncodeReceiptOptions):
   parts.push(setPrintWidth(profile.printWidthDots));
 
   // Header
-  parts.push(align('center'));
-  parts.push(bold(true));
-  const title = `*** ${canteenName} ***`;
-  if (title.length <= Math.floor(W / 2)) {
-    parts.push(doubleWidth(true));
-    parts.push(text(title + '\n'));
-    parts.push(doubleWidth(false));
-  } else {
-    parts.push(text(title + '\n'));
-  }
-  parts.push(bold(false));
+  parts.push(heading(`*** ${canteenName} ***`, profile));
 
   if (settings.show_branch && settings.branch_name) {
     parts.push(text(settings.branch_name + '\n'));
@@ -304,11 +338,7 @@ export function encodeReceipt(data: ReceiptData, options: EncodeReceiptOptions):
   }
 
   // Copy label — prominent so customer and accounts slips are never mixed up
-  parts.push(bold(true));
-  parts.push(doubleWidth(true));
-  parts.push(text(RECEIPT_COPY_LABELS[copy] + '\n'));
-  parts.push(doubleWidth(false));
-  parts.push(bold(false));
+  parts.push(heading(RECEIPT_COPY_LABELS[copy], profile));
   parts.push(rule('='));
 
   // Info
@@ -325,18 +355,22 @@ export function encodeReceipt(data: ReceiptData, options: EncodeReceiptOptions):
   parts.push(text(padRight('Item', itemCol) + padRight('Qty x Rate', qtyCol) + padLeft('= Amt', amtCol) + '\n'));
   parts.push(rule('-'));
   for (const item of data.items) {
-    const name = item.name.length > itemCol ? item.name.slice(0, itemCol - 3) + '...' : item.name;
-    parts.push(text(padRight(name, itemCol) + padRight(`${item.quantity} x ${item.rate}`, qtyCol) + padLeft(String(item.amount), amtCol) + '\n'));
+    // Long names wrap onto extra lines under the first — never cut short.
+    const [first, ...rest] = wrap(item.name, itemCol - 1);
+    parts.push(text(padRight(first, itemCol) + padRight(`${item.quantity} x ${item.rate}`, qtyCol) + padLeft(String(item.amount), amtCol) + '\n'));
+    for (const more of rest) parts.push(text(more + '\n'));
   }
   parts.push(rule('-'));
 
   // Total — financial amounts are never truncated
   parts.push(rule('='));
-  parts.push(bold(true));
+  // Large font, double height: same width rule as other bold lines (3 chars short).
+  const totalW = columnsFor(profile.printWidthDots, 'A') - 3;
   const totalLabel = 'TOTAL';
   const totalText = `Rs.${commas(data.total)}`;
-  parts.push(text(totalLabel + ' '.repeat(Math.max(1, SAFE_W - totalLabel.length - totalText.length)) + totalText + '\n'));
-  parts.push(bold(false));
+  parts.push(selectFontA(), bold(true), doubleHeight(true));
+  parts.push(text(totalLabel + ' '.repeat(Math.max(1, totalW - totalLabel.length - totalText.length)) + totalText + '\n'));
+  parts.push(doubleHeight(false), bold(false), selectFont(profile.font));
   parts.push(rule('='));
 
   // Payment
@@ -426,7 +460,7 @@ export function encodeCashClosing(
 
   parts.push(align('center'), bold(true));
   if (settings.canteen_name) parts.push(text(settings.canteen_name + '\n'));
-  parts.push(doubleWidth(true), text('CASH CLOSING\n'), doubleWidth(false), bold(false));
+  parts.push(bold(false), heading('CASH CLOSING', profile));
   parts.push(text(`Date: ${data.date}\n`));
   parts.push(rule('='));
   parts.push(align('left'));

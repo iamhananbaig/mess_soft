@@ -1,6 +1,21 @@
 import { useMemo } from 'react';
-import { interpretEscPos } from '@/lib/escposPreview';
+import { interpretEscPos, type PreviewRun } from '@/lib/escposPreview';
 import { cn } from '@/lib/utils';
+
+/** Font A is 12 dots wide, Font B 9: a run in the other font scales relative to the body. */
+const FONT_SCALE = { A: 12, B: 9 } as const;
+
+function runStyle(run: PreviewRun, bodyFont: 'A' | 'B'): React.CSSProperties | undefined {
+  const scale = FONT_SCALE[run.font] / FONT_SCALE[bodyFont];
+  if (scale === 1 && run.w === 1 && run.h === 1) return undefined;
+  // Glyphs grow with font size (scale × height); letter spacing adds the extra
+  // width of double-width text, in the run's own `ch` units.
+  return {
+    fontSize: `${scale * run.h}em`,
+    letterSpacing: run.w !== run.h ? `${(run.w - run.h) / run.h}ch` : undefined,
+    lineHeight: 1.2,
+  };
+}
 
 /**
  * Renders ESC/POS bytes as they will look on thermal paper. Uses the exact
@@ -25,7 +40,7 @@ export function SlipPreview({ bytes, className }: { bytes: Uint8Array; className
               <span
                 key={j}
                 className={run.bold ? 'font-bold' : undefined}
-                style={run.w > 1 || run.h > 1 ? { fontSize: `${run.h}em`, letterSpacing: `${run.w - run.h}ch`, lineHeight: 1.2 } : undefined}
+                style={runStyle(run, model.font)}
               >
                 {run.text}
               </span>
