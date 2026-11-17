@@ -48,7 +48,8 @@ const itemsSummary = (items: SaleItem[]) =>
 
 export function VoidsPage() {
   const { hasPermission } = useAuth();
-  const canRequest = hasPermission('sales:void-request');
+  // Requesting a void starts from the day's sales list, which needs sales:view as well.
+  const canRequest = hasPermission('sales:void-request') && hasPermission('sales:view');
   const canApprove = hasPermission('sales:void-approve');
 
   const [tab, setTab] = useState(canApprove ? 'requests' : 'sales');

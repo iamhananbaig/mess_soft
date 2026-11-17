@@ -19,7 +19,7 @@ import { FormField } from '@/components/FormField';
 import { TableSkeleton } from '@/components/TableSkeleton';
 import { EmptyState } from '@/components/EmptyState';
 import { StatusBadge } from '@/components/StatusBadge';
-import { Plus, PencilSimple, Trash, X, ListPlus } from '@phosphor-icons/react';
+import { Plus, PencilSimple, Trash, X, ListPlus, Eye } from '@phosphor-icons/react';
 import type { Category, InventoryItem } from '@/types/api';
 
 interface MenuItem { id: number; name: string; price: number; category_id: number; is_active: boolean; description: string | null; category: Category; food_cost?: number; margin?: number | null; }
@@ -34,6 +34,12 @@ function MarginText({ margin }: { margin?: number | null }) {
 
 export function MenuPage() {
   const { hasPermission } = useAuth();
+  // Only offer what the server will allow (routes/api.php); viewers get a read-only drawer.
+  const canCreate = hasPermission('menu:create');
+  const canEdit = hasPermission('menu:edit');
+  const canDelete = hasPermission('menu:delete');
+  const canRecipes = hasPermission('recipes:manage');
+  const canCreateCategory = hasPermission('categories:create');
   const [items, setItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
@@ -117,8 +123,11 @@ export function MenuPage() {
     setForm({ name: item.name, price: String(item.price), category_id: String(item.category_id), description: item.description ?? '' });
     setRecipeForm({ inventory_item_id: '', quantity: '1' });
     setRecipeSearch('');
-    loadInventory();
-    loadRecipes(item.id);
+    // Recipes (and the ingredient list for them) need recipes:manage — don't call what would be refused.
+    if (canRecipes) {
+      loadInventory();
+      loadRecipes(item.id);
+    }
     setDrawerOpen(true);
   };
 
@@ -255,7 +264,9 @@ export function MenuPage() {
                 <ListPlus className="size-4 sm:mr-1" /><span className="hidden sm:inline">Categories</span>
               </Button>
             )}
-            <Button onClick={openCreate} className="bg-accent hover:bg-accent/90 text-accent-foreground"><Plus className="size-4 sm:mr-1" /><span className="hidden sm:inline">Add Item</span></Button>
+            {canCreate && (
+              <Button onClick={openCreate} className="bg-accent hover:bg-accent/90 text-accent-foreground"><Plus className="size-4 sm:mr-1" /><span className="hidden sm:inline">Add Item</span></Button>
+            )}
           </div>
         }
       />
@@ -277,7 +288,7 @@ export function MenuPage() {
       {loading ? (
         <TableSkeleton columns={5} />
       ) : filtered.length === 0 ? (
-        <EmptyState title={search ? 'No menu items match your search' : 'No menu items found'} description={search ? 'Try a different search term' : 'Create your first menu item to get started'} action={!search ? <Button onClick={openCreate} size="sm">Add Item</Button> : undefined} />
+        <EmptyState title={search ? 'No menu items match your search' : 'No menu items found'} description={search ? 'Try a different search term' : 'Create your first menu item to get started'} action={!search && canCreate ? <Button onClick={openCreate} size="sm">Add Item</Button> : undefined} />
       ) : (
         <>
         {/* Phone: cards */}
@@ -294,9 +305,11 @@ export function MenuPage() {
               <div className="text-right">
                 <div className="font-semibold tabular-nums">{formatPKR(item.price)}</div>
               </div>
-              <Button variant="ghost" size="icon" className="size-9 text-destructive" aria-label={`Deactivate ${item.name}`} onClick={() => setDeleteId(item.id)}>
-                <Trash className="size-4" />
-              </Button>
+              {canDelete && (
+                <Button variant="ghost" size="icon" className="size-9 text-destructive" aria-label={`Deactivate ${item.name}`} onClick={() => setDeleteId(item.id)}>
+                  <Trash className="size-4" />
+                </Button>
+              )}
             </li>
           ))}
         </ul>
@@ -325,11 +338,13 @@ export function MenuPage() {
                 <TableCell>
                     <div className="flex gap-1">
                       <Tooltip><TooltipTrigger render={<Button variant="ghost" size="sm" onClick={() => openEdit(item)} />}>
-                        <PencilSimple className="size-4" />
-                      </TooltipTrigger><TooltipContent>Edit</TooltipContent></Tooltip>
-                      <Tooltip><TooltipTrigger render={<Button variant="ghost" size="sm" className="text-destructive" onClick={() => setDeleteId(item.id)} />}>
-                        <Trash className="size-4" />
-                      </TooltipTrigger><TooltipContent>Deactivate</TooltipContent></Tooltip>
+                        {canEdit || canRecipes ? <PencilSimple className="size-4" /> : <Eye className="size-4" />}
+                      </TooltipTrigger><TooltipContent>{canEdit || canRecipes ? 'Edit' : 'View'}</TooltipContent></Tooltip>
+                      {canDelete && (
+                        <Tooltip><TooltipTrigger render={<Button variant="ghost" size="sm" className="text-destructive" onClick={() => setDeleteId(item.id)} />}>
+                          <Trash className="size-4" />
+                        </TooltipTrigger><TooltipContent>Deactivate</TooltipContent></Tooltip>
+                      )}
                     </div>
                 </TableCell>
               </TableRow>
@@ -343,11 +358,12 @@ export function MenuPage() {
       <Drawer open={drawerOpen} onOpenChange={setDrawerOpen} swipeDirection="right">
         <DrawerContent className="w-full sm:max-w-lg">
           <DrawerHeader>
-            <DrawerTitle>{editing ? `Edit — ${editing.name}` : 'Add Menu Item'}</DrawerTitle>
+            <DrawerTitle>{editing ? (canEdit ? `Edit — ${editing.name}` : editing.name) : 'Add Menu Item'}</DrawerTitle>
           </DrawerHeader>
 
           <div className="flex-1 overflow-y-auto px-4 pb-4">
             <form onSubmit={handleSubmit} className="space-y-4">
+              <fieldset disabled={!(editing ? canEdit : canCreate)} className="space-y-4">
               <FormField label="Name" required>
                 <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
               </FormField>
@@ -365,13 +381,16 @@ export function MenuPage() {
               <FormField label="Description">
                 <textarea className="flex min-h-[60px] w-full rounded-md border border-input bg-input/20 px-3 py-2 text-xs/relaxed placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 outline-none resize-none dark:bg-input/30" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
               </FormField>
-              <Button type="submit" className="w-full bg-accent hover:bg-accent/90 text-accent-foreground" disabled={submitLoading}>
-                {submitLoading && <Spinner className="size-4 mr-2" />}
-                {editing ? 'Update' : 'Create'}
-              </Button>
+              </fieldset>
+              {(editing ? canEdit : canCreate) && (
+                <Button type="submit" className="w-full bg-accent hover:bg-accent/90 text-accent-foreground" disabled={submitLoading}>
+                  {submitLoading && <Spinner className="size-4 mr-2" />}
+                  {editing ? 'Update' : 'Create'}
+                </Button>
+              )}
             </form>
 
-            {editing && (
+            {editing && canRecipes && (
               <>
                 <Separator className="my-6" />
                 <div className="space-y-4">
@@ -473,8 +492,9 @@ export function MenuPage() {
       <Dialog open={categoryDialogOpen} onOpenChange={setCategoryDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{editingCategory ? 'Edit Category' : 'Add Category'}</DialogTitle>
+            <DialogTitle>{editingCategory ? 'Edit Category' : canCreateCategory ? 'Add Category' : 'Categories'}</DialogTitle>
           </DialogHeader>
+          {(editingCategory || canCreateCategory) && (<>
           <form onSubmit={handleCategorySubmit} className="space-y-4">
             <FormField label="Name" required>
               <Input value={categoryForm.name} onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })} required />
@@ -488,6 +508,7 @@ export function MenuPage() {
           </form>
 
           <Separator className="my-2" />
+          </>)}
 
           <div className="space-y-2">
             <h4 className="text-sm font-semibold">Existing Categories</h4>

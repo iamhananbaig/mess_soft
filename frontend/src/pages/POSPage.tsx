@@ -15,6 +15,7 @@ import { ShortcutsDialog } from '@/components/ShortcutsDialog';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { usePosSettings } from '@/hooks/usePosSettings';
+import { useAuth } from '@/contexts/AuthContext';
 import { showToast, showErrorToast } from '@/lib/toast';
 import { formatPKR } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -32,6 +33,9 @@ function quickAmounts(total: number): number[] {
 }
 
 export function POSPage() {
+  const { hasPermission } = useAuth();
+  // pos:use opens this page; recording the sale itself needs sales:create (roles are editable).
+  const canSell = hasPermission('sales:create');
   const [categories, setCategories] = useState<Category[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -109,7 +113,7 @@ export function POSPage() {
   const itemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
   const received = Number(amountReceived);
   const change = isCash && amountReceived !== '' ? received - total : 0;
-  const canCharge = cart.length > 0 && !checkoutLoading && (!isCash || (amountReceived !== '' && received >= total));
+  const canCharge = canSell && cart.length > 0 && !checkoutLoading && (!isCash || (amountReceived !== '' && received >= total));
 
   const handleCheckout = async () => {
     if (!canCharge) return;
@@ -137,7 +141,7 @@ export function POSPage() {
   };
 
   const handleChargeClick = () => {
-    if (cart.length === 0) return;
+    if (cart.length === 0 || !canSell) return;
     if (isCash && (amountReceived === '' || received < total)) {
       showToast('Enter the cash received (at least the total)', 'error');
       return;
@@ -264,6 +268,9 @@ export function POSPage() {
       )}
 
       <PrinterStatus />
+      {!canSell && (
+        <p className="text-xs text-destructive">Your role can't record sales. Ask an admin to add the "sales:create" permission.</p>
+      )}
       <Button
         className="w-full h-12 text-base bg-accent hover:bg-accent/90 text-accent-foreground"
         disabled={!canCharge}
