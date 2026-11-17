@@ -48,26 +48,75 @@ APP_TIMEZONE=Asia/Karachi
 LOG_CHANNEL=daily
 LOG_LEVEL=warning
 
-# MySQL — use 'db' as host (Docker service name)
+# Native MySQL on the VM, reached through its unix socket (mounted into the api container).
+# Find the socket:  mysql -u root -p -e "select @@socket"
 DB_CONNECTION=mysql
-DB_HOST=db
+MYSQL_SOCKET_DIR=/var/run/mysqld              # directory holding mysqld.sock ON THE VM
+DB_SOCKET=/var/run/mysqld/mysqld.sock         # path INSIDE the container
+DB_HOST=localhost
 DB_PORT=3306
 DB_DATABASE=mess_soft
-DB_USERNAME=mess_user
+DB_USERNAME=mess_user                         # must be allowed from 'localhost'
 DB_PASSWORD=CHANGE_THIS_TO_A_STRONG_PASSWORD
+RUN_MIGRATIONS=true                           # migrate on container start (back up first!)
 
 SESSION_DRIVER=database
 SESSION_LIFETIME=120
 SESSION_SECURE_COOKIE=false
 
 CACHE_STORE=database
-QUEUE_CONNECTION=database
+QUEUE_CONNECTION=sync          # no queue worker runs
 
 MAIL_MAILER=log
-
-# MySQL root password
-MYSQL_ROOT_PASSWORD=CHANGE_THIS_ROOT_PASSWORD
 ```
+
+Create the database and user in the VM's MySQL (once):
+
+```sql
+CREATE DATABASE mess_soft CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'mess_user'@'localhost' IDENTIFIED BY 'CHANGE_THIS_TO_A_STRONG_PASSWORD';
+GRANT ALL ON mess_soft.* TO 'mess_user'@'localhost';
+```
+
+## Moving prod from the bundled MySQL container to native MySQL (one-time)
+
+Older versions of this stack ran their own `db` (MySQL) container, with the data in the
+Docker volume `mess-soft_mysql-data`. The stack now uses the VM's native MySQL, so the data
+must be copied across **once**. Do this outside canteen hours. Nothing is deleted: the old
+container and volume stay until you remove them yourself.
+
+```bash
+cd /opt/mess_soft                      # wherever the repo lives on the VM
+
+# 0. Stop new sales while copying (keeps the old db container running)
+docker compose stop nginx api
+
+# 1. Dump from the OLD db container (still running from the previous compose file)
+docker exec mess-soft-db-1 sh -c 'exec mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" \
+  --single-transaction --routines --triggers --no-tablespaces --set-gtid-purged=OFF "$MYSQL_DATABASE"' \
+  > ~/mess_soft_from_container_$(date +%F_%H%M).sql
+tail -1 ~/mess_soft_from_container_*.sql        # must say "-- Dump completed"
+
+# 2. Create the database + user in native MySQL (see the SQL above), then import
+mysql -u root -p mess_soft < ~/mess_soft_from_container_<timestamp>.sql
+
+# 3. Spot-check counts match (run both; numbers must be identical)
+docker exec mess-soft-db-1 sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -N -e "select count(*) from sales; select count(*) from users; select max(id) from sales" "$MYSQL_DATABASE"'
+mysql -u root -p -N -e "select count(*) from sales; select count(*) from users; select max(id) from sales" mess_soft
+
+# 4. Update .env.docker.local: MYSQL_SOCKET_DIR, DB_SOCKET, DB_HOST=localhost, DB_PASSWORD,
+#    QUEUE_CONNECTION=sync, RUN_MIGRATIONS=true (see section 2). Then deploy the new stack:
+git pull
+docker compose --env-file .env.docker.local up -d --build --remove-orphans
+docker compose logs api | tail -30     # "MySQL is ready", migrations, then Octane started
+
+# 5. Log in, check today's sales and a reprint. Once happy (keep it a few days first):
+#    docker rm mess-soft-db-1   # the volume mess-soft_mysql-data still holds the old copy
+```
+
+`--remove-orphans` stops and removes the old `db`, `queue` and `scheduler` containers — but
+**not** the `mess-soft_mysql-data` volume, so the old data stays as a fallback.
+To roll back: check out the previous commit and `docker compose up -d --build`.
 
 ## 3. Build & Start
 
@@ -79,14 +128,14 @@ docker compose --env-file .env.docker.local up -d --build
 docker compose ps
 ```
 
-This starts 4 containers:
+This starts 2 containers (the database is the VM's native MySQL):
 
 | Container | Purpose | Port |
 |-----------|---------|------|
-| `mess-soft-db-1` | MySQL 8.0 | 3307 (host) → 3306 (container) |
-| `mess-soft-api-1` | Laravel PHP-FPM | internal (9000) |
-| `mess-soft-queue-1` | Queue worker | — |
-| `mess-soft-nginx-1` | Nginx (frontend + API proxy) | **9090** |
+| `mess-soft-api-1` | Laravel on Octane/FrankenPHP; runs migrations on start | internal (80) |
+| `mess-soft-nginx-1` | Nginx (frontend + API proxy), reached by Nginx Proxy Manager over `npm_network` | internal (80) |
+
+There is no queue worker or scheduler: the app has no queued jobs or scheduled tasks.
 
 ## 4. Initialize Database
 
@@ -170,8 +219,8 @@ docker compose exec api php artisan <command>
 # Access the API container shell
 docker compose exec api bash
 
-# Access MySQL
-docker compose exec db mysql -u mess_user -p mess_soft
+# Access MySQL (native on the VM)
+mysql -u mess_user -p mess_soft
 ```
 
 ## 8. Updating the App
@@ -182,18 +231,12 @@ cd /opt/mess_soft
 # Pull latest code
 git pull origin main
 
-# Rebuild and restart
-docker compose up -d --build
+# Back up first — the api container runs pending migrations when it starts
+mysqldump --single-transaction -u root -p mess_soft | gzip > ~/mess_soft_before_update_$(date +%F_%H%M).sql.gz
 
-# Run migrations
-docker compose exec api php artisan migrate --force
-
-# Re-cache
-docker compose exec api php artisan config:cache
-docker compose exec api php artisan route:cache
-
-# Restart queue worker
-docker compose restart queue
+# Rebuild and restart (migrations + config/route cache run automatically)
+docker compose --env-file .env.docker.local up -d --build --remove-orphans
+docker compose logs api | tail -30
 ```
 
 ## 9. Backups
@@ -201,17 +244,17 @@ docker compose restart queue
 ### Database Backup
 
 ```bash
-# Manual backup
-docker compose exec db mysqldump -u mess_user -p'PASSWORD' mess_soft > backup_$(date +%Y%m%d).sql
+# Manual backup (native MySQL on the VM)
+mysqldump --single-transaction -u root -p mess_soft | gzip > backup_$(date +%Y%m%d).sql.gz
 
-# Automated daily backup (add to host crontab)
-0 2 * * * docker compose -f /opt/mess_soft/docker-compose.yml exec -T db mysqldump -u mess_user -p'PASSWORD' mess_soft | gzip > /var/backups/mess-soft-$(date +\%Y\%m\%d).sql.gz
+# Automated daily backup (host crontab; put credentials in ~/.my.cnf, not on the command line)
+0 2 * * * mysqldump --single-transaction mess_soft | gzip > /var/backups/mess-soft-$(date +\%Y\%m\%d).sql.gz
 ```
 
 ### Restore Backup
 
 ```bash
-docker compose exec -T db mysql -u mess_user -p'PASSWORD' mess_soft < backup.sql
+gunzip -c backup.sql.gz | mysql -u root -p mess_soft
 ```
 
 ## 10. Docker Troubleshooting
@@ -219,11 +262,11 @@ docker compose exec -T db mysql -u mess_user -p'PASSWORD' mess_soft < backup.sql
 | Problem | Solution |
 |---------|----------|
 | Container won't start | `docker compose logs <service>` to see the error |
-| `SQLSTATE[HY000]` connection refused | DB container not ready. Wait for healthcheck or `docker compose restart api` |
+| api keeps logging "MySQL not ready" | Wrong `MYSQL_SOCKET_DIR`/`DB_SOCKET`, or the user isn't allowed from `localhost`. Test on the VM: `mysql -u mess_user -p -S <socket> mess_soft` |
+| SELinux (RHEL family) blocks the socket mount | Use TCP: `DB_SOCKET=` (empty), `DB_HOST=host.docker.internal`, MySQL `bind-address = 127.0.0.1,172.17.0.1`, user allowed from `'172.%'` |
 | Port 9090 already in use | Change `APP_PORT` in `.env.docker.local` (e.g., `APP_PORT=9090`) |
 | Permission errors on storage | `docker compose exec api chown -R www-data:www-data /var/www/storage /var/www/bootstrap/cache` |
 | Frontend shows blank page | Rebuild: `docker compose up -d --build nginx` (rebakes frontend) |
-| Queue jobs not processing | `docker compose restart queue` or check `docker compose logs queue` |
 | Nginx 502 Bad Gateway | API container down: `docker compose up -d api` |
 
 ---

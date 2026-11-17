@@ -1,30 +1,25 @@
 #!/bin/sh
 set -e
 
-# Wait for MySQL to be ready
-echo "Waiting for MySQL to be ready..."
-until php -r "
-    try {
-        \$pdo = new PDO(
-            'mysql:host=' . getenv('DB_HOST') . ';port=' . getenv('DB_PORT'),
-            getenv('DB_USERNAME'),
-            getenv('DB_PASSWORD'),
-            [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
-        );
-        echo \"MySQL is ready.\n\";
-        exit(0);
-    } catch (PDOException \$e) {
-        echo \"MySQL not ready: {\$e->getMessage()}\n\";
-        exit(1);
-    }
-" 2>/dev/null; do
-    echo "MySQL not ready, retrying in 3 seconds..."
+# Wait for MySQL (native on the host, reached via its unix socket or TCP), up to ~90s
+echo "Waiting for MySQL..."
+i=0
+until php -r '
+    $dsn = getenv("DB_SOCKET")
+        ? "mysql:unix_socket=" . getenv("DB_SOCKET")
+        : "mysql:host=" . getenv("DB_HOST") . ";port=" . (getenv("DB_PORT") ?: 3306);
+    try { new PDO($dsn . ";dbname=" . getenv("DB_DATABASE"), getenv("DB_USERNAME"), getenv("DB_PASSWORD")); }
+    catch (Throwable $e) { fwrite(STDERR, "MySQL not ready: " . $e->getMessage() . "\n"); exit(1); }'; do
+    i=$((i+1))
+    if [ "$i" -ge 30 ]; then
+        echo "MySQL not reachable (socket: ${DB_SOCKET:-none}, host: ${DB_HOST:-none}). Check MYSQL_SOCKET_DIR/DB_SOCKET and the DB user." >&2
+        exit 1
+    fi
     sleep 3
 done
+echo "MySQL is ready."
 
-# Only one container may migrate. The queue and scheduler containers share this
-# image and set RUN_MIGRATIONS=false; running migrations concurrently races
-# (MySQL DDL is not transactional) and can apply a migration twice.
+# Set RUN_MIGRATIONS=false to start without migrating (back up the database before deploys that migrate).
 if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
     echo "Running database migrations..."
     php artisan migrate --force

@@ -402,7 +402,8 @@ export function encodeCashClosing(
   }
   parts.push(rule('='));
 
-  parts.push(text(`Printed ${data.printed_at} by ${data.printed_by}\n`));
+  parts.push(text(`Printed: ${data.printed_at}\n`));
+  parts.push(text(`By: ${data.printed_by}\n`));
   parts.push(feedLines(2));
   parts.push(text('Cashier sign: ______________\n\n'));
   parts.push(text('Manager sign: ______________\n'));

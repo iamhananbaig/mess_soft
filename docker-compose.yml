@@ -1,3 +1,11 @@
+# mess_soft — production stack
+#   nginx  serves the React build and proxies /api to api (reached by Nginx Proxy Manager via npm_network)
+#   api    Laravel on Octane/FrankenPHP
+# The database is the MySQL installed natively on the VM, reached through its unix
+# socket (the host's socket directory is mounted into the api container), so MySQL
+# needs no bind-address or grant changes: a user allowed from 'localhost' works.
+# No queue worker or scheduler: the app has no queued jobs or scheduled tasks
+# (QUEUE_CONNECTION=sync). See DEPLOYMENT.md.
 name: mess-soft
 
 networks:
@@ -34,84 +42,21 @@ services:
     networks:
       - internal
     env_file:
-      - .env.docker.local
+      - ${APP_ENV_FILE:-.env.docker.local}
     volumes:
       - storage:/app/storage
-    depends_on:
-      db:
-        condition: service_healthy
+      # Host MySQL socket directory (find it with: mysql -u root -p -e "select @@socket")
+      - ${MYSQL_SOCKET_DIR:-/var/run/mysqld}:/var/run/mysqld
+    extra_hosts:
+      # Only used if you switch to TCP (DB_SOCKET empty, DB_HOST=host.docker.internal)
+      - "host.docker.internal:host-gateway"
     healthcheck:
       test: ["CMD", "php", "artisan", "octane:status"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 10s
-    restart: unless-stopped
-
-  queue:
-    build:
-      context: .
-      dockerfile: api/Dockerfile
-    networks:
-      - internal
-    env_file:
-      - .env.docker.local
-    environment:
-      RUN_MIGRATIONS: "false"
-    volumes:
-      - storage:/app/storage
-    command:
-      - php
-      - artisan
-      - queue:work
-      - --sleep=3
-      - --tries=3
-      - --max-time=3600
-    healthcheck:
-      disable: true
-    depends_on:
-      api:
-        condition: service_healthy
-    restart: unless-stopped
-
-  scheduler:
-    build:
-      context: .
-      dockerfile: api/Dockerfile
-    networks:
-      - internal
-    env_file:
-      - .env.docker.local
-    environment:
-      RUN_MIGRATIONS: "false"
-    volumes:
-      - storage:/app/storage
-    command:
-      - php
-      - artisan
-      - schedule:work
-    healthcheck:
-      disable: true
-    depends_on:
-      api:
-        condition: service_healthy
-    restart: unless-stopped
-
-  db:
-    image: mysql:8.4
-    networks:
-      - internal
-    env_file:
-      - .env.docker.local
-    volumes:
-      - mysql-data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
+      start_period: 30s
     restart: unless-stopped
 
 volumes:
   storage:
-  mysql-data:
