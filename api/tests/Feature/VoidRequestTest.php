@@ -146,11 +146,14 @@ class VoidRequestTest extends TestCase
         $this->assertEquals(10, (float) $this->bun->fresh()->current_stock);
     }
 
-    public function test_cannot_approve_own_request(): void
+    public function test_user_with_cashier_and_manager_roles_can_approve_own_request(): void
     {
-        $requestId = $this->requestVoid($this->makeSale(), $this->manager);
+        $this->cashier->assignRole('manager');
+        $saleId = $this->makeSale(2);
+        $requestId = $this->requestVoid($saleId, $this->cashier);
 
-        $this->as($this->manager)->postJson("/api/v1/void-requests/{$requestId}/approve")->assertForbidden();
+        $this->as($this->cashier)->postJson("/api/v1/void-requests/{$requestId}/approve")->assertOk();
+        $this->assertNotNull(Sale::find($saleId)->voided_at);
     }
 
     public function test_cannot_request_void_of_voided_sale(): void

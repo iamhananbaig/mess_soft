@@ -185,7 +185,7 @@ Any authenticated user. Returns user + roles + permissions.
 | POST | `/void-requests/{id}/reject` | `sales:void-approve` |
 
 - Request body: `{ "reason": "Wrong item" }`; review body: `{ "note": "optional" }`.
-- One pending request per sale; a reviewer cannot review their own request; reviewed requests are final.
+- One pending request per sale; reviewed requests are final. Anyone with `sales:void-approve` may approve, including their own request (e.g. a user holding both cashier and manager roles).
 - Approve: in one transaction, returns exactly the stock the sale consumed (from its `source=sale` movements, as `source=void` movements) and sets `sales.voided_at`.
 - Voided sales are excluded from `/reports/daily` and `/reports/items`; `/reports/daily` adds `voided_count`, `voided_amount`; `/reports/receipts` flags `is_voided`; `/sales/{id}/receipt` adds `voided`; `/reports/stock-summary` adds `void_returns`.
 
@@ -255,6 +255,17 @@ Fields: `canteen_name`, `branch_name`, `show_branch`, `header_lines` (≤3 lines
 ```
 
 ---
+
+### Employee accounts
+
+| Method | Endpoint | Permission | Notes |
+|---|---|---|---|
+| POST | `/employees` | `employees:edit` | `{ name, email, password (min 8), roles: [...] }` |
+| PUT | `/employees/{id}/password` | `employees:edit` | `{ password }` — signs the user out everywhere; not for own account |
+| POST | `/employees/{id}/role` | `employees:edit` | `{ roles: [...] }` (multiple roles allowed; legacy `{ role }` still accepted) |
+| PUT | `/me/password` | any signed-in user | `{ current_password, password, password_confirmation }` — other sessions signed out |
+
+Only a super-admin can grant `super-admin` or modify a super-admin account.
 
 ## Permissions Summary
 

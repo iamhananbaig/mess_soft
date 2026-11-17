@@ -20,6 +20,7 @@ Route::prefix('v1')->group(function () {
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::get('/me', [AuthController::class, 'me']);
+        Route::put('/me/password', [AuthController::class, 'changePassword'])->middleware('throttle:10,1');
 
         Route::get('/settings/receipt', [SettingController::class, 'receipt']);
         Route::put('/settings/receipt', [SettingController::class, 'updateReceipt'])
@@ -113,7 +114,9 @@ Route::prefix('v1')->group(function () {
             Route::get('/employees', [EmployeeController::class, 'index']);
         });
         Route::middleware('permission:employees:edit')->group(function () {
+            Route::post('/employees', [EmployeeController::class, 'store']);
             Route::put('/employees/{employee}', [EmployeeController::class, 'update']);
+            Route::put('/employees/{employee}/password', [EmployeeController::class, 'resetPassword']);
             Route::post('/employees/{employee}/role', [EmployeeController::class, 'updateRole']);
         });
 

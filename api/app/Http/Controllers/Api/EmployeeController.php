@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rules\Password;
 
 class EmployeeController extends Controller
 {
@@ -14,6 +16,58 @@ class EmployeeController extends Controller
         $employees = User::with('roles:id,name')->get();
 
         return response()->json($employees);
+    }
+
+    public function store(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|max:255|unique:users,email',
+            'password' => ['required', 'string', Password::min(8)],
+            ...$this->roleRules(),
+        ]);
+
+        $roles = $this->requestedRoles($validated);
+        if ($denied = $this->guardSuperAdminGrant($request, $roles)) {
+            return $denied;
+        }
+
+        $employee = DB::transaction(function () use ($validated, $roles) {
+            $employee = User::create([
+                'name' => $validated['name'],
+                'email' => strtolower($validated['email']),
+                'password' => $validated['password'],
+                'is_active' => true,
+            ]);
+            $employee->syncRoles($roles);
+
+            return $employee;
+        });
+
+        return response()->json($employee->load('roles:id,name'), 201);
+    }
+
+    /**
+     * Admin sets a new password for another user and signs them out everywhere.
+     */
+    public function resetPassword(Request $request, User $employee): JsonResponse
+    {
+        if ($request->user()->id === $employee->id) {
+            return response()->json(['message' => 'Use "Change password" in your account menu to change your own password'], 422);
+        }
+
+        if ($denied = $this->guardSuperAdmin($request, $employee)) {
+            return $denied;
+        }
+
+        $validated = $request->validate([
+            'password' => ['required', 'string', Password::min(8)],
+        ]);
+
+        $employee->update(['password' => $validated['password']]);
+        $employee->tokens()->delete();
+
+        return response()->json(['message' => "Password updated for {$employee->name}"]);
     }
 
     public function update(Request $request, User $employee): JsonResponse
@@ -51,17 +105,44 @@ class EmployeeController extends Controller
             return $denied;
         }
 
-        $validated = $request->validate([
-            'role' => 'required|string|exists:roles,name',
-        ]);
+        $validated = $request->validate($this->roleRules());
 
-        if ($validated['role'] === 'super-admin' && ! $request->user()->hasRole('super-admin')) {
+        $roles = $this->requestedRoles($validated);
+        if ($denied = $this->guardSuperAdminGrant($request, $roles)) {
+            return $denied;
+        }
+
+        $employee->syncRoles($roles);
+
+        return response()->json($employee->load('roles:id,name'));
+    }
+
+    /**
+     * A user may hold several roles (e.g. cashier + manager); permissions combine.
+     * Accepts `roles: [...]`, or the older single `role` for compatibility.
+     */
+    private function roleRules(): array
+    {
+        return [
+            'roles' => 'required_without:role|array|min:1',
+            'roles.*' => 'string|distinct|exists:roles,name',
+            'role' => 'required_without:roles|string|exists:roles,name',
+        ];
+    }
+
+    /** @return list<string> */
+    private function requestedRoles(array $validated): array
+    {
+        return array_values($validated['roles'] ?? [$validated['role']]);
+    }
+
+    private function guardSuperAdminGrant(Request $request, array $roles): ?JsonResponse
+    {
+        if (in_array('super-admin', $roles, true) && ! $request->user()->hasRole('super-admin')) {
             return response()->json(['message' => 'Only a super-admin can grant the super-admin role'], 403);
         }
 
-        $employee->syncRoles([$validated['role']]);
-
-        return response()->json($employee->load('roles:id,name'));
+        return null;
     }
 
     /**

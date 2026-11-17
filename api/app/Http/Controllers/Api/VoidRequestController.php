@@ -71,7 +71,7 @@ class VoidRequestController extends Controller
 
         return DB::transaction(function () use ($validated, $request, $voidRequest) {
             $voidRequest = VoidRequest::lockForUpdate()->findOrFail($voidRequest->id);
-            if ($error = $this->checkReviewable($request, $voidRequest)) {
+            if ($error = $this->checkReviewable($voidRequest)) {
                 return $error;
             }
 
@@ -123,7 +123,7 @@ class VoidRequestController extends Controller
 
         return DB::transaction(function () use ($validated, $request, $voidRequest) {
             $voidRequest = VoidRequest::lockForUpdate()->findOrFail($voidRequest->id);
-            if ($error = $this->checkReviewable($request, $voidRequest)) {
+            if ($error = $this->checkReviewable($voidRequest)) {
                 return $error;
             }
 
@@ -138,13 +138,10 @@ class VoidRequestController extends Controller
         });
     }
 
-    private function checkReviewable(Request $request, VoidRequest $voidRequest): ?JsonResponse
+    private function checkReviewable(VoidRequest $voidRequest): ?JsonResponse
     {
         if ($voidRequest->status !== VoidRequest::PENDING) {
             return response()->json(['message' => "This request was already {$voidRequest->status}"], 422);
-        }
-        if ($voidRequest->requested_by === $request->user()->id) {
-            return response()->json(['message' => 'You cannot review your own void request'], 403);
         }
 
         return null;

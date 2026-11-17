@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { PageHeader } from '@/components/PageHeader';
 import { SearchInput } from '@/components/SearchInput';
@@ -14,29 +13,67 @@ import { FormField } from '@/components/FormField';
 import { TableSkeleton } from '@/components/TableSkeleton';
 import { EmptyState } from '@/components/EmptyState';
 import { StatusBadge } from '@/components/StatusBadge';
-import { PencilSimple, UserMinus, UserPlus } from '@phosphor-icons/react';
+import { PencilSimple, UserMinus, UserPlus, Key, Plus } from '@phosphor-icons/react';
 
 interface Employee { id: number; name: string; email: string; is_active: boolean; roles: { name: string }[]; }
 
 const ROLES = ['super-admin', 'admin', 'manager', 'cashier', 'employee'];
 
+const ROLE_HINTS: Record<string, string> = {
+  'super-admin': 'Everything',
+  admin: 'Manage menu, stock, staff, receipt design',
+  manager: 'Approves voids, reports',
+  cashier: 'Enters sales, requests voids',
+  employee: 'Enters sales, consumptions, requests voids',
+};
+
+/** Checkbox list — a user may hold several roles; their permissions combine. */
+function RolePicker({ roles, value, onChange }: { roles: string[]; value: string[]; onChange: (v: string[]) => void }) {
+  return (
+    <div className="space-y-1.5">
+      {roles.map((r) => (
+        <label key={r} className="flex items-start gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            className="mt-0.5 size-4 accent-current"
+            checked={value.includes(r)}
+            onChange={(e) => onChange(e.target.checked ? [...value, r] : value.filter((x) => x !== r))}
+          />
+          <span className="text-sm">
+            <span className="font-medium capitalize">{r}</span>
+            {ROLE_HINTS[r] && <span className="text-muted-foreground"> — {ROLE_HINTS[r]}</span>}
+          </span>
+        </label>
+      ))}
+      {value.length === 0 && <p className="text-xs text-destructive">Select at least one role.</p>}
+    </div>
+  );
+}
+
+const sameRoles = (a: string[], b: string[]) => a.length === b.length && a.every((r) => b.includes(r));
+
 export function EmployeesPage() {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
+  const canEdit = hasPermission('employees:edit');
   const isSuperAdmin = user?.roles.includes('super-admin') ?? false;
   const assignableRoles = isSuperAdmin ? ROLES : ROLES.filter((r) => r !== 'super-admin');
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selected, setSelected] = useState<Employee | null>(null);
-  const [form, setForm] = useState({ name: '', role: '' });
+  const [form, setForm] = useState<{ name: string; roles: string[] }>({ name: '', roles: [] });
   const [search, setSearch] = useState('');
   const [submitLoading, setSubmitLoading] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newUser, setNewUser] = useState({ name: '', email: '', password: '', roles: ['cashier'] });
+  const [resetFor, setResetFor] = useState<Employee | null>(null);
+  const [newPassword, setNewPassword] = useState('');
 
   const filtered = useMemo(() =>
     employees.filter((e) =>
       e.name.toLowerCase().includes(search.toLowerCase()) ||
       e.email.toLowerCase().includes(search.toLowerCase()) ||
-      e.roles[0]?.name?.toLowerCase().includes(search.toLowerCase())
+      e.roles.some((r) => r.name.toLowerCase().includes(search.toLowerCase()))
     ), [employees, search]);
 
   const load = () => { api.get('/employees').then((r) => { setEmployees(r.data.data ?? r.data); }).catch(() => { showToast('Failed to load employees', 'error'); }).finally(() => { setLoading(false); }); };
@@ -44,7 +81,7 @@ export function EmployeesPage() {
 
   const openEdit = (emp: Employee) => {
     setSelected(emp);
-    setForm({ name: emp.name, role: emp.roles[0]?.name ?? '' });
+    setForm({ name: emp.name, roles: emp.roles.map((r) => r.name) });
     setDialogOpen(true);
   };
 
@@ -54,14 +91,46 @@ export function EmployeesPage() {
     try {
       if (selected) {
         await api.put(`/employees/${selected.id}`, { name: form.name });
-        if (form.role && form.role !== selected.roles[0]?.name) {
-          await api.post(`/employees/${selected.id}/role`, { role: form.role });
+        if (form.roles.length > 0 && !sameRoles(form.roles, selected.roles.map((r) => r.name))) {
+          await api.post(`/employees/${selected.id}/role`, { roles: form.roles });
         }
       }
       setDialogOpen(false);
       load();
     } catch (err) {
       showErrorToast(err, 'Failed to update employee');
+    } finally {
+      setSubmitLoading(false);
+    }
+  };
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitLoading(true);
+    try {
+      await api.post('/employees', newUser);
+      showToast(`${newUser.name} added — they can now log in with ${newUser.email}`, 'success');
+      setCreateOpen(false);
+      setNewUser({ name: '', email: '', password: '', roles: ['cashier'] });
+      load();
+    } catch (err) {
+      showErrorToast(err, 'Failed to add employee');
+    } finally {
+      setSubmitLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetFor) return;
+    setSubmitLoading(true);
+    try {
+      await api.put(`/employees/${resetFor.id}/password`, { password: newPassword });
+      showToast(`Password changed for ${resetFor.name}. They have been signed out.`, 'success');
+      setResetFor(null);
+      setNewPassword('');
+    } catch (err) {
+      showErrorToast(err, 'Failed to change password');
     } finally {
       setSubmitLoading(false);
     }
@@ -82,7 +151,15 @@ export function EmployeesPage() {
   return (
     <TooltipProvider>
     <div className="flex flex-col gap-6 p-4 sm:p-6">
-      <PageHeader title="Employee Management" description="Manage staff accounts and roles" />
+      <PageHeader
+        title="Employee Management"
+        description="Manage staff accounts and roles"
+        action={canEdit && (
+          <Button onClick={() => setCreateOpen(true)} className="bg-accent hover:bg-accent/90 text-accent-foreground">
+            <Plus className="size-4 mr-1" /> Add Employee
+          </Button>
+        )}
+      />
       <SearchInput value={search} onChange={setSearch} placeholder="Search employees..." />
       {loading ? <TableSkeleton columns={5} /> : filtered.length === 0 ? (
         <EmptyState title={search ? 'No employees match your search' : 'No employees found'} description={search ? 'Try a different search term' : 'Add your first employee'} />
@@ -102,7 +179,11 @@ export function EmployeesPage() {
               <TableRow key={emp.id}>
                 <TableCell className="font-medium">{emp.name}</TableCell>
                 <TableCell className="text-muted-foreground">{emp.email}</TableCell>
-                <TableCell><StatusBadge status={emp.roles[0]?.name ?? 'none'} /></TableCell>
+                <TableCell>
+                  <div className="flex flex-wrap gap-1">
+                    {emp.roles.length ? emp.roles.map((r) => <StatusBadge key={r.name} status={r.name} />) : <StatusBadge status="none" />}
+                  </div>
+                </TableCell>
                 <TableCell><StatusBadge status={emp.is_active ? 'Active' : 'Inactive'} /></TableCell>
                 <TableCell>
                     <div className="flex gap-1">
@@ -112,6 +193,11 @@ export function EmployeesPage() {
                       <Tooltip><TooltipTrigger render={<Button variant="ghost" size="sm" onClick={() => toggleActive(emp)} disabled={submitLoading} />}>
                         {emp.is_active ? <UserMinus className="size-4" /> : <UserPlus className="size-4" />}
                       </TooltipTrigger><TooltipContent>{emp.is_active ? 'Deactivate' : 'Activate'}</TooltipContent></Tooltip>
+                      {emp.id !== user?.id && (
+                        <Tooltip><TooltipTrigger render={<Button variant="ghost" size="sm" onClick={() => { setNewPassword(''); setResetFor(emp); }} />}>
+                          <Key className="size-4" />
+                        </TooltipTrigger><TooltipContent>Change password</TooltipContent></Tooltip>
+                      )}
                     </div>
                 </TableCell>
               </TableRow>
@@ -120,6 +206,46 @@ export function EmployeesPage() {
         </Table>
       )}
 
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Add Employee</DialogTitle></DialogHeader>
+          <form onSubmit={handleCreate} className="space-y-4">
+            <FormField label="Name" required>
+              <Input value={newUser.name} onChange={(e) => setNewUser({ ...newUser, name: e.target.value })} required autoFocus />
+            </FormField>
+            <FormField label="Email (used to log in)" required>
+              <Input type="email" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} autoComplete="off" required />
+            </FormField>
+            <FormField label="Password (min 8 characters)" required>
+              <Input type="text" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} minLength={8} autoComplete="new-password" required />
+            </FormField>
+            <FormField label="Roles" required>
+              <RolePicker roles={assignableRoles} value={newUser.roles} onChange={(roles) => setNewUser({ ...newUser, roles })} />
+            </FormField>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
+              <Button type="submit" className="bg-accent hover:bg-accent/90 text-accent-foreground" disabled={submitLoading || newUser.roles.length === 0}>Add Employee</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!resetFor} onOpenChange={(o) => !o && setResetFor(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Change password — {resetFor?.name}</DialogTitle></DialogHeader>
+          <form onSubmit={handleResetPassword} className="space-y-4">
+            <FormField label="New password (min 8 characters)" required>
+              <Input type="text" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} minLength={8} autoComplete="new-password" required autoFocus />
+            </FormField>
+            <p className="text-xs text-muted-foreground">They will be signed out on all devices and must log in with the new password.</p>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setResetFor(null)}>Cancel</Button>
+              <Button type="submit" className="bg-accent hover:bg-accent/90 text-accent-foreground" disabled={submitLoading || newPassword.length < 8}>Change password</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Edit Employee</DialogTitle></DialogHeader>
@@ -127,15 +253,10 @@ export function EmployeesPage() {
             <FormField label="Name" required>
               <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
             </FormField>
-            <FormField label="Role">
-              <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v ?? '' })}>
-                <SelectTrigger><SelectValue placeholder="Select role">{form.role || undefined}</SelectValue></SelectTrigger>
-                <SelectContent>
-                  {assignableRoles.map((r) => (<SelectItem key={r} value={r}>{r}</SelectItem>))}
-                </SelectContent>
-              </Select>
+            <FormField label="Roles">
+              <RolePicker roles={assignableRoles} value={form.roles} onChange={(roles) => setForm({ ...form, roles })} />
             </FormField>
-            <DialogFooter><Button type="submit" className="bg-accent hover:bg-accent/90 text-accent-foreground" disabled={submitLoading}>Update</Button></DialogFooter>
+            <DialogFooter><Button type="submit" className="bg-accent hover:bg-accent/90 text-accent-foreground" disabled={submitLoading || form.roles.length === 0}>Update</Button></DialogFooter>
           </form>
         </DialogContent>
       </Dialog>

@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { useTheme } from '@/contexts/ThemeContext';
+import { ChangePasswordDialog } from '@/components/ChangePasswordDialog';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   DropdownMenu,
@@ -13,7 +15,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar';
-import { Sun, Moon, SignOut, CaretUpDown } from '@phosphor-icons/react';
+import { Sun, Moon, SignOut, CaretUpDown, Key } from '@phosphor-icons/react';
 
 interface NavUserProps {
   user: {
@@ -26,6 +28,7 @@ interface NavUserProps {
 export function NavUser({ user, onLogout }: NavUserProps) {
   const { isMobile } = useSidebar();
   const { theme, toggleTheme } = useTheme();
+  const [passwordOpen, setPasswordOpen] = useState(false);
 
   const initials = user.name
     .split(' ')
@@ -66,6 +69,10 @@ export function NavUser({ user, onLogout }: NavUserProps) {
                 {theme === 'light' ? <Moon className="size-4" /> : <Sun className="size-4" />}
                 <span>{theme === 'light' ? 'Dark mode' : 'Light mode'}</span>
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setPasswordOpen(true)}>
+                <Key className="size-4" />
+                <span>Change password</span>
+              </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuItem onClick={onLogout}>
               <SignOut className="size-4" />
@@ -73,6 +80,7 @@ export function NavUser({ user, onLogout }: NavUserProps) {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        <ChangePasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} />
       </SidebarMenuItem>
     </SidebarMenu>
   );

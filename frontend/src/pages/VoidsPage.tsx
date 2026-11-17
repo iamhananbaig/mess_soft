@@ -48,7 +48,7 @@ const itemsSummary = (items: SaleItem[]) =>
   items.map((i) => `${i.quantity}× ${i.menu_item?.name ?? 'Item'}`).join(', ');
 
 export function VoidsPage() {
-  const { user, hasPermission } = useAuth();
+  const { hasPermission } = useAuth();
   const canRequest = hasPermission('sales:void-request');
   const canApprove = hasPermission('sales:void-approve');
 
@@ -177,7 +177,6 @@ export function VoidsPage() {
               </TableHeader>
               <TableBody>
                 {requests.map((r) => {
-                  const isOwn = r.requested_by === user?.id;
                   return (
                     <TableRow key={r.id}>
                       <TableCell>
@@ -200,9 +199,7 @@ export function VoidsPage() {
                       </TableCell>
                       {canApprove && (
                         <TableCell>
-                          {r.status === 'pending' && (isOwn ? (
-                            <span className="text-xs text-muted-foreground">Another manager must review</span>
-                          ) : (
+                          {r.status === 'pending' && (
                             <div className="flex gap-1">
                               <Button size="sm" variant="destructive" onClick={() => { setNote(''); setReview({ request: r, action: 'approve' }); }}>
                                 <Check className="size-4 mr-1" /> Approve
@@ -211,7 +208,7 @@ export function VoidsPage() {
                                 <X className="size-4 mr-1" /> Reject
                               </Button>
                             </div>
-                          ))}
+                          )}
                         </TableCell>
                       )}
                     </TableRow>
