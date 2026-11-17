@@ -15,12 +15,16 @@ const TEXT_ENCODER = new TextEncoder();
 
 export interface EscPosProfile {
   printWidthDots: number;
-  fontBColumns: number;
+  /** Characters per line in the chosen font. */
+  columns: number;
+  /** ESC/POS Font A (12-dot wide, larger) or Font B (9-dot wide, compact). */
+  font: 'A' | 'B';
 }
 
 export const DEFAULT_ESC_POS_PROFILE: EscPosProfile = {
-  printWidthDots: 384, // 58mm paper — safe default for most POS printers
-  fontBColumns: 42,    // 384 / 9 (Font B dot width)
+  printWidthDots: 384, // 58mm paper
+  columns: 42,         // 384 / 9 (Font B)
+  font: 'B',
 };
 
 /**
@@ -142,10 +146,12 @@ export interface ReceiptSettings {
   show_cashier: boolean;
   show_payment: boolean;
   paper_width: '58' | '80';
+  /** 80mm only: 'large' = Font A, 48 chars (easier to read); 'compact' = Font B, 64 chars. */
+  text_size: 'large' | 'compact';
   tear_feed_lines: number;
 }
 
-/** Matches the slip as printed before settings existed. */
+/** Defaults for the canteen's Speed-X BT600M (80mm). */
 export const DEFAULT_RECEIPT_SETTINGS: ReceiptSettings = {
   canteen_name: '',
   branch_name: '',
@@ -154,14 +160,26 @@ export const DEFAULT_RECEIPT_SETTINGS: ReceiptSettings = {
   footer_text: 'Thank you for visiting!',
   show_cashier: true,
   show_payment: true,
-  paper_width: '58',
+  paper_width: '80',
+  text_size: 'large',
   tear_feed_lines: TEAR_FEED_LINES,
 };
 
-export function profileForPaper(width: ReceiptSettings['paper_width']): EscPosProfile {
-  return width === '80'
-    ? { printWidthDots: 576, fontBColumns: 64 } // 80mm: 576 / 9
-    : DEFAULT_ESC_POS_PROFILE;
+export function profileForPaper(
+  width: ReceiptSettings['paper_width'],
+  textSize: ReceiptSettings['text_size'] = 'large',
+): EscPosProfile {
+  if (width === '80') {
+    return textSize === 'compact'
+      ? { printWidthDots: 576, columns: 64, font: 'B' } // 576 / 9
+      : { printWidthDots: 576, columns: 48, font: 'A' }; // 576 / 12
+  }
+  // 58mm stays on Font B: Font A gives only 32 columns, too narrow for the item table.
+  return DEFAULT_ESC_POS_PROFILE;
+}
+
+function selectFont(font: EscPosProfile['font']): Uint8Array {
+  return font === 'A' ? selectFontA() : selectFontB();
 }
 
 // ── Receipt encoder ──────────────────────────────────────────────────
@@ -192,17 +210,17 @@ export function encodeReceiptCopies(
 export function encodeReceipt(data: ReceiptData, options: EncodeReceiptOptions): Uint8Array {
   const { copy, reprint = false, autoCut = false } = options;
   const settings: ReceiptSettings = { ...DEFAULT_RECEIPT_SETTINGS, ...options.settings };
-  const profile = profileForPaper(settings.paper_width);
+  const profile = profileForPaper(settings.paper_width, settings.text_size);
   const canteenName = settings.canteen_name || data.canteen_name;
 
   const parts: Uint8Array[] = [];
   const isCash = data.payment_method === 'Cash';
-  const W = profile.fontBColumns;
+  const W = profile.columns;
   const SAFE_W = W - 3; // leave 3 chars (~27 dots) of right margin
   const rule = (char: string) => text(line(char, W) + '\n');
 
   parts.push(initialize());
-  parts.push(selectFontB());
+  parts.push(selectFont(profile.font));
   parts.push(setPrintWidth(profile.printWidthDots));
 
   // Header
@@ -293,7 +311,8 @@ export function encodeReceipt(data: ReceiptData, options: EncodeReceiptOptions):
         ),
       );
     } else {
-      parts.push(text(`Payment: ${data.payment_method}\n`));
+      parts.push(text(`Paid by: ${data.payment_method}\n`));
+      if (data.payment_reference) parts.push(text(`Ref: ${data.payment_reference}\n`));
     }
   }
 
@@ -357,14 +376,15 @@ export function encodeCashClosing(
   options: { autoCut?: boolean; settings?: Partial<ReceiptSettings> } = {},
 ): Uint8Array {
   const settings: ReceiptSettings = { ...DEFAULT_RECEIPT_SETTINGS, ...options.settings };
-  const W = profileForPaper(settings.paper_width).fontBColumns;
+  const profile = profileForPaper(settings.paper_width, settings.text_size);
+  const W = profile.columns;
   const SAFE_W = W - 3;
   const parts: Uint8Array[] = [];
   const rule = (char: string) => text(line(char, W) + '\n');
   const pair = (label: string, value: string) =>
     text(label + ' '.repeat(Math.max(1, SAFE_W - label.length - value.length)) + value + '\n');
 
-  parts.push(initialize(), selectFontB(), setPrintWidth(profileForPaper(settings.paper_width).printWidthDots));
+  parts.push(initialize(), selectFont(profile.font), setPrintWidth(profile.printWidthDots));
 
   parts.push(align('center'), bold(true));
   if (settings.canteen_name) parts.push(text(settings.canteen_name + '\n'));

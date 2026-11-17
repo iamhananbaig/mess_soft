@@ -1,13 +1,10 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import api from '@/services/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent } from '@/components/ui/card';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Spinner } from '@/components/ui/spinner';
-import { Separator } from '@/components/ui/separator';
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { PageSpinner } from '@/components/PageSpinner';
 import { EmptyState } from '@/components/EmptyState';
@@ -17,319 +14,351 @@ import { PrinterStatus } from '@/components/PrinterStatus';
 import { ShortcutsDialog } from '@/components/ShortcutsDialog';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { usePosSettings } from '@/hooks/usePosSettings';
 import { showToast, showErrorToast } from '@/lib/toast';
 import { formatPKR } from '@/lib/format';
-import { FormField } from '@/components/FormField';
-import { ShoppingCart, Plus, Minus, X, Trash, MagnifyingGlass } from '@phosphor-icons/react';
+import { cn } from '@/lib/utils';
+import { ShoppingCart, Plus, Minus, Trash, MagnifyingGlass, X, CaretRight } from '@phosphor-icons/react';
 import type { Category } from '@/types/api';
 
 interface MenuItem { id: number; name: string; price: number; category_id: number; is_available: boolean; }
 interface CartItem { menu_item_id: number; name: string; price: number; quantity: number; }
 
+/** Exact amount plus the next round notes a customer is likely to hand over. */
+function quickAmounts(total: number): number[] {
+  if (total <= 0) return [];
+  const up = (step: number) => Math.ceil(total / step) * step;
+  return [...new Set([total, up(100), up(500), up(1000), up(5000)])].filter((n) => n >= total).slice(0, 4);
+}
+
 export function POSPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [posSearch, setPosSearch] = useState('');
+  const [search, setSearch] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState('cash');
   const [amountReceived, setAmountReceived] = useState('');
+  const [reference, setReference] = useState('');
   const [printDialogOpen, setPrintDialogOpen] = useState(false);
   const [printReceiptData, setPrintReceiptData] = useState<ReceiptData | null>(null);
   const [cartOpen, setCartOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   const isMobile = useIsMobile();
+  const pos = usePosSettings();
   const searchRef = useRef<HTMLInputElement>(null);
+
+  const methods = useMemo(
+    () => pos.available_payment_methods.filter((m) => pos.payment_methods.includes(m.key)),
+    [pos],
+  );
+  // If an admin disables the selected method, fall back to the first enabled one.
+  const activeMethod = methods.some((m) => m.key === paymentMethod) ? paymentMethod : methods[0]?.key ?? 'cash';
+  const isCash = activeMethod === 'cash';
 
   const categoryIds = ['all', ...categories.map((c) => String(c.id))];
   const categoryIndex = categoryIds.indexOf(selectedCategory);
 
-  useEffect(() => {
+  const load = useCallback(() => {
+    setLoading(true);
+    setLoadError('');
     Promise.all([api.get('/categories'), api.get('/menu')]).then(([catRes, menuRes]) => {
       setCategories(catRes.data);
       setMenuItems(menuRes.data);
     }).catch(() => {
-      setLoadError('Failed to load menu data');
-    }).finally(() => {
-      setLoading(false);
-    });
+      setLoadError('Could not load the menu. Check the connection and try again.');
+    }).finally(() => setLoading(false));
   }, []);
+  useEffect(() => { load(); }, [load]);
 
-  const filteredItems = (selectedCategory === 'all'
-    ? menuItems
-    : menuItems.filter((item) => item.category_id === Number(selectedCategory))
-  ).filter((item) => item.name.toLowerCase().includes(posSearch.toLowerCase()));
+  const filteredItems = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return menuItems
+      .filter((i) => selectedCategory === 'all' || i.category_id === Number(selectedCategory))
+      .filter((i) => !q || i.name.toLowerCase().includes(q));
+  }, [menuItems, selectedCategory, search]);
 
   const addToCart = (item: MenuItem) => {
+    if (!item.is_available || checkoutLoading) return;
+    if ('vibrate' in navigator) navigator.vibrate?.(10); // small tap feedback on phones
     setCart((prev) => {
       const existing = prev.find((c) => c.menu_item_id === item.id);
-      if (existing) {
-        return prev.map((c) => c.menu_item_id === item.id ? { ...c, quantity: c.quantity + 1 } : c);
-      }
+      if (existing) return prev.map((c) => c.menu_item_id === item.id ? { ...c, quantity: c.quantity + 1 } : c);
       return [...prev, { menu_item_id: item.id, name: item.name, price: item.price, quantity: 1 }];
     });
   };
 
   const updateQuantity = (menuItemId: number, delta: number) => {
-    setCart((prev) => {
-      const updated = prev.map((c) => c.menu_item_id === menuItemId ? { ...c, quantity: c.quantity + delta } : c);
-      return updated.filter((c) => c.quantity > 0);
-    });
+    setCart((prev) => prev
+      .map((c) => c.menu_item_id === menuItemId ? { ...c, quantity: c.quantity + delta } : c)
+      .filter((c) => c.quantity > 0));
   };
 
-  const removeFromCart = (menuItemId: number) => {
-    setCart((prev) => prev.filter((c) => c.menu_item_id !== menuItemId));
-  };
-
-  const clearCart = useCallback(() => setCart([]), []);
+  const clearCart = useCallback(() => {
+    setCart([]);
+    setAmountReceived('');
+    setReference('');
+  }, []);
 
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const itemCount = cart.reduce((sum, item) => sum + item.quantity, 0);
+  const received = Number(amountReceived);
+  const change = isCash && amountReceived !== '' ? received - total : 0;
+  const canCharge = cart.length > 0 && !checkoutLoading && (!isCash || (amountReceived !== '' && received >= total));
 
   const handleCheckout = async () => {
-    if (cart.length === 0) return;
+    if (!canCharge) return;
     setCheckoutLoading(true);
     try {
       const saleRes = await api.post('/sales', {
         items: cart.map((c) => ({ menu_item_id: c.menu_item_id, quantity: c.quantity })),
-        amount_received: Number(amountReceived),
+        payment_method: activeMethod,
+        payment_reference: isCash ? null : reference.trim() || null,
+        amount_received: isCash ? received : null,
       });
       const receiptRes = await api.get(`/sales/${saleRes.data.id}/receipt`);
       setPrintReceiptData(receiptRes.data as ReceiptData);
       setPrintDialogOpen(true);
       showToast(`Sale #${saleRes.data.id} — ${formatPKR(saleRes.data.total_amount)}`, 'success');
-      setCart([]);
-      setAmountReceived('');
+      clearCart();
       setCartOpen(false);
-    } catch (err: unknown) {
+      // Refresh availability (stock changed).
+      api.get('/menu').then((r) => setMenuItems(r.data)).catch(() => {});
+    } catch (err) {
       showErrorToast(err, 'Sale failed');
     } finally {
       setCheckoutLoading(false);
     }
   };
 
-  const handleCheckoutClick = () => {
+  const handleChargeClick = () => {
     if (cart.length === 0) return;
-    const received = Number(amountReceived);
-    if (!received || received < total) {
-      showToast('Amount received must be at least the total', 'error');
+    if (isCash && (amountReceived === '' || received < total)) {
+      showToast('Enter the cash received (at least the total)', 'error');
       return;
     }
-    setConfirmOpen(true);
+    // On a phone the checkout sheet is the confirmation step; on desktop confirm in a dialog.
+    if (isMobile) handleCheckout();
+    else setConfirmOpen(true);
   };
 
   const handleSearchClear = useCallback(() => {
-    if (posSearch.length > 0) {
-      setPosSearch('');
+    if (search.length > 0) {
+      setSearch('');
       return true;
     }
     return false;
-  }, [posSearch]);
+  }, [search]);
 
   useKeyboardShortcuts({
     onSearchFocus: () => searchRef.current?.focus(),
     onSearchClear: handleSearchClear,
-    onCheckout: handleCheckoutClick,
+    onCheckout: handleChargeClick,
     onClearCart: clearCart,
-    onCategoryPrev: () => {
-      if (categoryIndex > 0) {
-        setSelectedCategory(categoryIds[categoryIndex - 1]);
-      }
-    },
-    onCategoryNext: () => {
-      if (categoryIndex < categoryIds.length - 1) {
-        setSelectedCategory(categoryIds[categoryIndex + 1]);
-      }
-    },
+    onCategoryPrev: () => { if (categoryIndex > 0) setSelectedCategory(categoryIds[categoryIndex - 1]); },
+    onCategoryNext: () => { if (categoryIndex < categoryIds.length - 1) setSelectedCategory(categoryIds[categoryIndex + 1]); },
     onShowHelp: () => setShortcutsOpen(true),
   });
 
   if (loading) return <PageSpinner />;
 
   if (loadError) return (
-    <div className="flex flex-col items-center justify-center h-full gap-4">
+    <div className="flex flex-col items-center justify-center h-full gap-4 p-6 text-center">
       <p className="text-destructive font-medium">{loadError}</p>
-      <Button variant="outline" onClick={() => window.location.reload()}>Retry</Button>
+      <Button variant="outline" onClick={load}>Retry</Button>
     </div>
   );
 
-  const cartContent = (
-    <>
-      <div className="p-4 border-b flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <ShoppingCart className="size-4 text-muted-foreground" />
-          <h2 className="font-semibold">Order</h2>
-          {itemCount > 0 && <Badge variant="secondary" className="text-xs">{itemCount}</Badge>}
-        </div>
-        {cart.length > 0 && (
-          <Button variant="ghost" size="sm" className="text-destructive h-8" onClick={clearCart}>
-            <Trash className="size-3.5 mr-1" />
-            Clear
-          </Button>
-        )}
+  const cartLines = cart.length === 0 ? (
+    <div className="flex flex-col items-center justify-center py-10 text-muted-foreground">
+      <ShoppingCart className="size-10 mb-3 opacity-30" />
+      <p className="text-sm font-medium">Cart is empty</p>
+      <p className="text-xs mt-1 opacity-60">Tap an item to add it</p>
+    </div>
+  ) : (
+    <ul className="divide-y">
+      {cart.map((item) => (
+        <li key={item.menu_item_id} className="flex items-center gap-2 py-2.5">
+          <div className="flex-1 min-w-0">
+            <div className="font-medium text-sm truncate">{item.name}</div>
+            <div className="text-xs text-muted-foreground">{formatPKR(item.price)} × {item.quantity} = {formatPKR(item.price * item.quantity)}</div>
+          </div>
+          <div className="flex items-center gap-1">
+            <Button variant="outline" size="icon" className="size-10 rounded-full" aria-label={`Remove one ${item.name}`} onClick={() => updateQuantity(item.menu_item_id, -1)}>
+              {item.quantity === 1 ? <Trash className="size-4 text-destructive" /> : <Minus className="size-4" />}
+            </Button>
+            <span className="w-7 text-center text-sm font-semibold tabular-nums">{item.quantity}</span>
+            <Button variant="outline" size="icon" className="size-10 rounded-full" aria-label={`Add one ${item.name}`} onClick={() => updateQuantity(item.menu_item_id, 1)}>
+              <Plus className="size-4" />
+            </Button>
+          </div>
+        </li>
+      ))}
+    </ul>
+  );
+
+  const payment = (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between text-lg font-bold">
+        <span>Total</span>
+        <span className="tabular-nums">{formatPKR(total)}</span>
       </div>
 
-      <div className="flex-1 overflow-auto p-4">
-        {cart.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-            <ShoppingCart className="size-10 mb-3 opacity-30" />
-            <p className="text-sm font-medium">Cart is empty</p>
-            <p className="text-xs mt-1 opacity-60">Tap an item to add it</p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {cart.map((item) => (
-              <div key={item.menu_item_id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/50">
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-sm truncate">{item.name}</div>
-                  <div className="text-xs text-muted-foreground">{formatPKR(item.price)} x {item.quantity}</div>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Button variant="outline" size="sm" className="size-9 p-0" aria-label="Decrease quantity" onClick={() => updateQuantity(item.menu_item_id, -1)}>
-                    <Minus className="size-4" />
-                  </Button>
-                  <span className="w-8 text-center text-sm font-medium">{item.quantity}</span>
-                  <Button variant="outline" size="sm" className="size-9 p-0" aria-label="Increase quantity" onClick={() => updateQuantity(item.menu_item_id, 1)}>
-                    <Plus className="size-4" />
-                  </Button>
-                  <Button variant="ghost" size="sm" className="size-9 p-0 text-destructive" aria-label="Remove item" onClick={() => removeFromCart(item.menu_item_id)}>
-                    <X className="size-4" />
-                  </Button>
-                </div>
-              </div>
+      {methods.length > 1 && (
+        <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Payment method">
+          {methods.map((m) => (
+            <button
+              key={m.key}
+              type="button"
+              role="radio"
+              aria-checked={activeMethod === m.key}
+              onClick={() => setPaymentMethod(m.key)}
+              className={cn(
+                'h-11 rounded-lg border text-sm font-medium transition-colors',
+                activeMethod === m.key ? 'border-accent bg-accent/10 text-accent' : 'hover:bg-muted',
+              )}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {isCash ? (
+        <div className="space-y-2">
+          <label className="text-xs font-medium text-muted-foreground" htmlFor="cash-received">Cash received</label>
+          <Input
+            id="cash-received"
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            className="h-12 text-lg tabular-nums"
+            placeholder={String(total)}
+            value={amountReceived}
+            onChange={(e) => setAmountReceived(e.target.value.replace(/[^0-9]/g, ''))}
+          />
+          <div className="flex flex-wrap gap-2">
+            {quickAmounts(total).map((amt) => (
+              <Button key={amt} type="button" variant="outline" size="sm" className="h-9 tabular-nums" onClick={() => setAmountReceived(String(amt))}>
+                {amt === total ? 'Exact' : formatPKR(amt)}
+              </Button>
             ))}
           </div>
-        )}
-      </div>
-
-      <div className="p-4 border-t">
-        <div className="flex justify-between text-sm text-muted-foreground mb-1">
-          <span>Subtotal ({itemCount} items)</span>
-          <span>{formatPKR(total)}</span>
-        </div>
-        <Separator className="my-2" />
-        <div className="flex justify-between text-lg font-bold mb-3">
-          <span>Total</span>
-          <span>{formatPKR(total)}</span>
-        </div>
-        <div className="space-y-2 mb-4">
-          <FormField label="Amount Received (PKR)" required>
-            <Input
-              type="text"
-              inputMode="decimal"
-              min={total}
-              placeholder={String(total)}
-              value={amountReceived}
-              onChange={(e) => setAmountReceived(e.target.value)}
-            />
-          </FormField>
-          {Number(amountReceived) >= total && (
-            <div className="flex justify-between text-sm font-medium text-green-600">
-              <span>Change</span>
-              <span>{formatPKR(Number(amountReceived) - total)}</span>
+          {amountReceived !== '' && (
+            <div className={cn('flex justify-between text-base font-semibold', change >= 0 ? 'text-green-600' : 'text-destructive')}>
+              <span>{change >= 0 ? 'Change' : 'Short'}</span>
+              <span className="tabular-nums">{formatPKR(Math.abs(change))}</span>
             </div>
           )}
         </div>
-        <PrinterStatus />
-        <Button
-          className="w-full bg-accent hover:bg-accent/90 text-accent-foreground"
-          size="lg"
-          disabled={cart.length === 0 || checkoutLoading}
-          onClick={handleCheckoutClick}
-        >
-          {checkoutLoading ? <Spinner className="size-4 mr-2" /> : null}
-          {checkoutLoading ? 'Processing...' : `Pay Cash — ${formatPKR(total)}`}
-        </Button>
-        {!isMobile && (
-          <p className="text-center text-xs text-muted-foreground mt-3">
-            Press <kbd className="px-1 py-0.5 rounded bg-muted text-[0.625rem] font-medium">?</kbd> for keyboard shortcuts
-          </p>
-        )}
-      </div>
-    </>
+      ) : (
+        <div className="space-y-2">
+          <label className="text-xs font-medium text-muted-foreground" htmlFor="pay-ref">Transaction ID (optional)</label>
+          <Input id="pay-ref" className="h-11" value={reference} maxLength={100} onChange={(e) => setReference(e.target.value)} placeholder="e.g. last 4 digits / TID" />
+        </div>
+      )}
+
+      <PrinterStatus />
+      <Button
+        className="w-full h-12 text-base bg-accent hover:bg-accent/90 text-accent-foreground"
+        disabled={!canCharge}
+        onClick={handleChargeClick}
+      >
+        {checkoutLoading && <Spinner className="size-4 mr-2" />}
+        {checkoutLoading ? 'Processing…' : `Charge ${formatPKR(total)}${methods.length > 1 ? ` · ${methods.find((m) => m.key === activeMethod)?.label}` : ''}`}
+      </Button>
+    </div>
   );
 
   return (
     <div className="flex h-full">
       <ShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
-      <PrintDialog
-        data={printReceiptData}
-        open={printDialogOpen}
-        onOpenChange={setPrintDialogOpen}
-      />
+      <PrintDialog data={printReceiptData} open={printDialogOpen} onOpenChange={setPrintDialogOpen} />
 
-      {/* Confirmation Dialog */}
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent className="sm:max-w-xs">
           <DialogHeader>
-            <DialogTitle>Confirm Sale</DialogTitle>
+            <DialogTitle>Confirm sale</DialogTitle>
             <DialogDescription>
-              Process sale for <strong>{formatPKR(total)}</strong>?
+              Charge <strong>{formatPKR(total)}</strong> by {methods.find((m) => m.key === activeMethod)?.label ?? 'Cash'}?
+              {isCash && change > 0 && <> Give <strong>{formatPKR(change)}</strong> change.</>}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancel</Button>
-            <Button
-              className="bg-accent hover:bg-accent/90 text-accent-foreground"
-              onClick={() => { setConfirmOpen(false); handleCheckout(); }}
-              disabled={checkoutLoading}
-            >
-              {checkoutLoading ? <Spinner className="size-4 mr-2" /> : null}
+            <Button className="bg-accent hover:bg-accent/90 text-accent-foreground" autoFocus disabled={checkoutLoading}
+              onClick={() => { setConfirmOpen(false); handleCheckout(); }}>
               Confirm
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Menu Items Panel */}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <div className="p-4 border-b space-y-3">
-          <div className="relative max-w-sm">
+      {/* Menu */}
+      <div className="flex-1 flex flex-col min-w-0">
+        <div className="sticky top-12 md:top-16 z-20 bg-background/95 backdrop-blur border-b px-3 py-2 md:p-4 space-y-2">
+          <div className="relative md:max-w-sm">
             <MagnifyingGlass className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-            <Input ref={searchRef} placeholder="Search items..." value={posSearch} onChange={(e) => setPosSearch(e.target.value)} className="pl-9" />
+            <Input ref={searchRef} placeholder="Search items…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 pr-9 h-10" />
+            {search && (
+              <button type="button" aria-label="Clear search" onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground">
+                <X className="size-4" />
+              </button>
+            )}
           </div>
-          <Tabs value={selectedCategory} onValueChange={setSelectedCategory}>
-            <TabsList className="flex-wrap h-auto gap-1">
-              <TabsTrigger value="all">All</TabsTrigger>
-              {categories.map((cat) => (
-                <TabsTrigger key={cat.id} value={String(cat.id)}>{cat.name}</TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
+          {/* Horizontally scrolling category chips — one thumb swipe on a phone */}
+          <div className="-mx-3 px-3 md:mx-0 md:px-0 flex gap-2 overflow-x-auto no-scrollbar md:flex-wrap">
+            {[{ id: 'all', name: 'All' }, ...categories.map((c) => ({ id: String(c.id), name: c.name }))].map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setSelectedCategory(c.id)}
+                className={cn(
+                  'shrink-0 h-9 rounded-full border px-4 text-sm font-medium transition-colors',
+                  selectedCategory === c.id ? 'bg-foreground text-background border-foreground' : 'bg-background hover:bg-muted',
+                )}
+              >
+                {c.name}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <div className="flex-1 overflow-auto p-4">
+        <div className={cn('flex-1 p-3 md:p-4', isMobile && cart.length > 0 && 'pb-24')}>
           {filteredItems.length === 0 ? (
-            <EmptyState title="No menu items found" description="Try selecting a different category" />
+            <EmptyState title="No items found" description={search ? 'Try a different search' : 'Try another category'} />
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2.5 md:gap-3">
               {filteredItems.map((item) => {
                 const cartQty = cart.find((c) => c.menu_item_id === item.id)?.quantity ?? 0;
+                const disabled = !item.is_available || checkoutLoading;
                 return (
-                  <Card
+                  <button
                     key={item.id}
-                    className={`relative transition-all ${item.is_available && !checkoutLoading ? 'cursor-pointer hover:shadow-md hover:border-accent/50 active:scale-[0.97]' : 'opacity-50 cursor-not-allowed'}`}
-                    role="button"
-                    tabIndex={item.is_available && !checkoutLoading ? 0 : -1}
-                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); if (item.is_available && !checkoutLoading) addToCart(item); } }}
-                    onClick={() => item.is_available && !checkoutLoading && addToCart(item)}
-                    aria-label={`Add ${item.name} — ${formatPKR(item.price)}${!item.is_available ? ' (out of stock)' : ''}`}
+                    type="button"
+                    disabled={disabled}
+                    onClick={() => addToCart(item)}
+                    aria-label={`Add ${item.name}, ${formatPKR(item.price)}${!item.is_available ? ', out of stock' : ''}`}
+                    className={cn(
+                      'relative flex min-h-24 flex-col justify-between rounded-xl border bg-card p-3 text-left transition-all select-none',
+                      disabled ? 'opacity-50' : 'active:scale-[0.97] hover:border-accent/60 hover:shadow-sm',
+                      cartQty > 0 && 'border-accent ring-1 ring-accent/40',
+                    )}
                   >
                     {cartQty > 0 && (
-                      <Badge className="absolute top-2 right-2 size-6 p-0 text-[0.65rem] flex items-center justify-center">{cartQty}</Badge>
+                      <Badge className="absolute top-2 right-2 h-6 min-w-6 rounded-full px-1.5 tabular-nums">{cartQty}</Badge>
                     )}
-                    <CardContent className="p-4 text-center">
-                      <div className="font-medium text-sm mb-1">{item.name}</div>
-                      <div className="text-lg font-bold text-accent">{formatPKR(item.price)}</div>
-                      {!item.is_available && (
-                        <div className="text-xs text-destructive font-medium mt-1">Out of stock</div>
-                      )}
-                    </CardContent>
-                  </Card>
+                    <span className="pr-7 text-sm font-medium leading-snug line-clamp-2">{item.name}</span>
+                    <span className="mt-2 flex items-end justify-between">
+                      <span className="text-base font-bold text-accent tabular-nums">{formatPKR(item.price)}</span>
+                      {!item.is_available && <span className="text-[11px] font-medium text-destructive">Out of stock</span>}
+                    </span>
+                  </button>
                 );
               })}
             </div>
@@ -337,37 +366,66 @@ export function POSPage() {
         </div>
       </div>
 
-      {/* Desktop Cart Sidebar */}
+      {/* Desktop cart */}
       {!isMobile && (
-        <div className="w-80 lg:w-96 border-l flex flex-col bg-card">
-          {cartContent}
+        <aside className="w-80 lg:w-96 border-l flex flex-col bg-card">
+          <div className="p-4 border-b flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <ShoppingCart className="size-4 text-muted-foreground" />
+              <h2 className="font-semibold">Order</h2>
+              {itemCount > 0 && <Badge variant="secondary">{itemCount}</Badge>}
+            </div>
+            {cart.length > 0 && (
+              <Button variant="ghost" size="sm" className="text-destructive h-8" onClick={clearCart}>
+                <Trash className="size-3.5 mr-1" /> Clear
+              </Button>
+            )}
+          </div>
+          <div className="flex-1 overflow-auto px-4">{cartLines}</div>
+          <div className="p-4 border-t">
+            {payment}
+            <p className="text-center text-xs text-muted-foreground mt-3">
+              Press <kbd className="px-1 py-0.5 rounded bg-muted text-[0.625rem] font-medium">?</kbd> for keyboard shortcuts
+            </p>
+          </div>
+        </aside>
+      )}
+
+      {/* Phone: cart bar pinned above the tab bar */}
+      {isMobile && cart.length > 0 && !cartOpen && (
+        <div className="fixed inset-x-0 z-30 px-3" style={{ bottom: 'calc(4.5rem + env(safe-area-inset-bottom))' }}>
+          <button
+            type="button"
+            onClick={() => setCartOpen(true)}
+            className="flex w-full items-center gap-3 rounded-xl bg-accent px-4 py-3 text-accent-foreground shadow-lg active:scale-[0.99] transition-transform"
+          >
+            <span className="flex size-8 items-center justify-center rounded-full bg-accent-foreground/20 text-sm font-bold tabular-nums">{itemCount}</span>
+            <span className="flex-1 text-left">
+              <span className="block text-xs opacity-80">{itemCount === 1 ? '1 item' : `${itemCount} items`}</span>
+              <span className="block text-lg font-bold tabular-nums">{formatPKR(total)}</span>
+            </span>
+            <span className="flex items-center gap-1 font-semibold">Checkout <CaretRight className="size-4" /></span>
+          </button>
         </div>
       )}
 
-      {/* Mobile FAB */}
-      {isMobile && cart.length > 0 && (
-        <button
-          type="button"
-          onClick={() => setCartOpen(true)}
-          className="fixed bottom-6 right-6 z-50 flex flex-col items-center justify-center size-16 rounded-full bg-accent text-accent-foreground shadow-lg active:scale-95 transition-transform"
-        >
-          <ShoppingCart className="size-5 mb-0.5" />
-          <span className="text-[0.6rem] font-bold leading-none">{formatPKR(total)}</span>
-          <Badge variant="secondary" className="absolute -top-1 -right-1 text-[0.6rem] size-5 p-0 flex items-center justify-center">
-            {itemCount}
-          </Badge>
-        </button>
-      )}
-
-      {/* Mobile Cart Sheet */}
       {isMobile && (
         <Sheet open={cartOpen} onOpenChange={setCartOpen}>
-          <SheetContent side="bottom" className="h-[90vh] p-0" showCloseButton={false}>
-            <SheetHeader className="p-4 border-b">
-              <SheetTitle>Your Order</SheetTitle>
+          <SheetContent side="bottom" className="max-h-[92dvh] rounded-t-2xl p-0 flex flex-col gap-0">
+            <SheetHeader className="px-4 pt-4 pb-2 border-b">
+              <div className="flex items-center justify-between pr-8">
+                <SheetTitle>Order · {itemCount} {itemCount === 1 ? 'item' : 'items'}</SheetTitle>
+                {cart.length > 0 && (
+                  <Button variant="ghost" size="sm" className="text-destructive h-8" onClick={() => { clearCart(); setCartOpen(false); }}>
+                    Clear
+                  </Button>
+                )}
+              </div>
+              <SheetDescription className="sr-only">Review the order and take payment</SheetDescription>
             </SheetHeader>
-            <div className="flex-1 flex flex-col overflow-hidden h-[calc(90vh-60px)]">
-              {cartContent}
+            <div className="min-h-0 flex-1 overflow-y-auto px-4">{cartLines}</div>
+            <div className="border-t p-4" style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}>
+              {payment}
             </div>
           </SheetContent>
         </Sheet>

@@ -11,8 +11,9 @@ export function SlipPreview({ bytes, className }: { bytes: Uint8Array; className
 
   return (
     <div
-      className={cn('mx-auto shrink-0 rounded-sm bg-white text-black shadow-md ring-1 ring-black/10 px-3 py-4 font-mono text-[11px] leading-[1.35]', className)}
-      style={{ width: `calc(${model.columns}ch + 1.5rem)` }}
+      className={cn('mx-auto shrink-0 rounded-sm bg-white text-black shadow-md ring-1 ring-black/10 px-3 py-4 font-mono leading-[1.35]', className)}
+      // Font A (12-dot) is ~1.33× wider than Font B (9-dot): keep the paper the same width.
+      style={{ width: `calc(${model.columns}ch + 1.5rem)`, fontSize: model.font === 'A' ? '12.5px' : '11px' }}
       aria-label="Receipt preview"
     >
       {model.lines.map((line, i) =>

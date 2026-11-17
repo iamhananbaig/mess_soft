@@ -128,3 +128,18 @@
         @apply font-sans;
     }
 }
+
+/* Horizontal chip rows (POS categories): scroll by swipe without a visible bar. */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Phones: no 300ms double-tap zoom delay on buttons; no blue tap flash. */
+button,
+[role='button'] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}

@@ -21,6 +21,7 @@ export interface ReceiptData {
   }[];
   total: number;
   payment_method: string;
+  payment_reference?: string | null;
   amount_received: number | null;
   change: number | null;
   /** Sale was voided (reprints are marked VOID). */
