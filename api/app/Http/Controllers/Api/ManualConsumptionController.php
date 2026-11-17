@@ -52,11 +52,25 @@ class ManualConsumptionController extends Controller
         });
     }
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
-        $consumptions = ManualConsumption::with(['inventoryItem', 'user'])
+        $validated = $request->validate([
+            'from' => 'nullable|date',
+            'to' => 'nullable|date',
+            'inventory_item_id' => 'nullable|integer',
+            'search' => 'nullable|string|max:100',
+            'per_page' => 'sometimes|integer|min:1|max:100',
+        ]);
+
+        $consumptions = ManualConsumption::with(['inventoryItem', 'user:id,name'])
+            ->when($validated['from'] ?? null, fn ($q, $v) => $q->where('created_at', '>=', $v))
+            ->when($validated['to'] ?? null, fn ($q, $v) => $q->where('created_at', '<=', $v.' 23:59:59'))
+            ->when($validated['inventory_item_id'] ?? null, fn ($q, $v) => $q->where('inventory_item_id', $v))
+            ->when($validated['search'] ?? null, fn ($q, $v) => $q->where(fn ($q) => $q
+                ->where('reason', 'like', "%{$v}%")
+                ->orWhereHas('inventoryItem', fn ($i) => $i->where('name', 'like', "%{$v}%"))))
             ->orderByDesc('created_at')
-            ->paginate(20);
+            ->paginate($validated['per_page'] ?? 25);
 
         return response()->json($consumptions);
     }

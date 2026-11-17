@@ -8,6 +8,7 @@ use App\Models\ManualConsumption;
 use App\Models\Sale;
 use App\Models\SaleItem;
 use App\Models\StockMovement;
+use App\Models\User;
 use App\Support\PaymentMethods;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,15 +19,19 @@ class ReportController extends Controller
 {
     public function daily(Request $request): JsonResponse
     {
-        $request->validate(['date' => 'nullable|date_format:Y-m-d']);
+        $request->validate(['date' => 'nullable|date_format:Y-m-d', ...self::FILTER_RULES]);
         $date = $request->date ? Carbon::parse($request->date) : Carbon::today();
+        $filter = $this->saleFilter($request);
 
-        $sales = Sale::whereDate('created_at', $date)->notVoided();
-        $voided = Sale::whereDate('created_at', $date)->whereNotNull('voided_at');
+        $sales = Sale::whereDate('created_at', $date)->notVoided()->where($filter);
+        $voided = Sale::whereDate('created_at', $date)->whereNotNull('voided_at')->where($filter);
 
-        $totalSales = (clone $sales)->sum('total_amount');
+        // SUM() comes back as a string on MySQL; the UI formats numbers.
+        $totalSales = (int) (clone $sales)->sum('total_amount');
         $totalTransactions = (clone $sales)->count();
-        $itemsSold = SaleItem::whereHas('sale', fn ($q) => $q->whereDate('created_at', $date)->notVoided())->sum('quantity');
+        $itemsSold = (int) SaleItem::whereHas('sale', fn ($q) => $q->whereDate('created_at', $date)->notVoided()->where($filter))
+            ->when($request->category_id, fn ($q, $c) => $q->whereHas('menuItem', fn ($m) => $m->where('category_id', $c)))
+            ->sum('quantity');
 
         $items = SaleItem::select(
             'menu_item_id',
@@ -36,7 +41,8 @@ class ReportController extends Controller
             // Sales made before costing existed have no cost; count them so the UI can say so.
             DB::raw('SUM(CASE WHEN unit_cost IS NULL THEN quantity ELSE 0 END) as uncosted_quantity'),
         )
-            ->whereHas('sale', fn ($q) => $q->whereDate('created_at', $date)->notVoided())
+            ->whereHas('sale', fn ($q) => $q->whereDate('created_at', $date)->notVoided()->where($filter))
+            ->when($request->category_id, fn ($q, $c) => $q->whereHas('menuItem', fn ($m) => $m->where('category_id', $c)))
             ->groupBy('menu_item_id')
             ->with('menuItem:id,name')
             ->orderByDesc('total_quantity')
@@ -69,9 +75,10 @@ class ReportController extends Controller
 
     public function items(Request $request): JsonResponse
     {
-        $request->validate(['from' => 'nullable|date', 'to' => 'nullable|date']);
+        $request->validate(['from' => 'nullable|date', 'to' => 'nullable|date', ...self::FILTER_RULES]);
         $from = $request->from ? Carbon::parse($request->from) : Carbon::now()->startOfMonth();
         $to = $request->to ? Carbon::parse($request->to) : Carbon::now();
+        $filter = $this->saleFilter($request);
 
         $items = SaleItem::select(
             'menu_item_id',
@@ -81,9 +88,10 @@ class ReportController extends Controller
             // Sales made before costing existed have no cost; count them so the UI can say so.
             DB::raw('SUM(CASE WHEN unit_cost IS NULL THEN quantity ELSE 0 END) as uncosted_quantity'),
         )
-            ->whereHas('sale', function ($q) use ($from, $to) {
-                $q->whereBetween('created_at', [$from, $to->copy()->endOfDay()])->notVoided();
+            ->whereHas('sale', function ($q) use ($from, $to, $filter) {
+                $q->whereBetween('created_at', [$from, $to->copy()->endOfDay()])->notVoided()->where($filter);
             })
+            ->when($request->category_id, fn ($q, $c) => $q->whereHas('menuItem', fn ($m) => $m->where('category_id', $c)))
             ->groupBy('menu_item_id')
             ->orderByDesc('total_quantity')
             ->with('menuItem:id,name,price')
@@ -97,6 +105,29 @@ class ReportController extends Controller
             });
 
         return response()->json($items);
+    }
+
+    /** Optional filters shared by sales reports. */
+    private const FILTER_RULES = [
+        'user_id' => 'nullable|integer',
+        'payment_method' => 'nullable|string|max:20',
+        'category_id' => 'nullable|integer',
+    ];
+
+    private function saleFilter(Request $request): \Closure
+    {
+        return function ($q) use ($request) {
+            $q->when($request->user_id, fn ($q, $v) => $q->where('user_id', $v))
+                ->when($request->payment_method, fn ($q, $v) => $q->where('payment_method', $v));
+        };
+    }
+
+    /** People who have made sales, for the cashier filter (no employees:view needed). */
+    public function cashiers(): JsonResponse
+    {
+        return response()->json(
+            User::whereIn('id', Sale::query()->select('user_id')->distinct())->orderBy('name')->get(['id', 'name'])
+        );
     }
 
     public function stock(): JsonResponse
@@ -146,11 +177,14 @@ class ReportController extends Controller
 
     public function receipts(Request $request): JsonResponse
     {
-        $request->validate(['date' => 'nullable|date_format:Y-m-d']);
+        $request->validate(['date' => 'nullable|date_format:Y-m-d', 'status' => 'nullable|in:valid,voided', ...self::FILTER_RULES]);
         $date = $request->date ? Carbon::parse($request->date) : Carbon::today();
 
         $sales = Sale::whereDate('created_at', $date)
-            ->with(['items' => fn ($q) => $q->with('menuItem:id,name')])
+            ->where($this->saleFilter($request))
+            ->when($request->status === 'valid', fn ($q) => $q->whereNull('voided_at'))
+            ->when($request->status === 'voided', fn ($q) => $q->whereNotNull('voided_at'))
+            ->with(['items' => fn ($q) => $q->with('menuItem:id,name'), 'user:id,name'])
             ->orderBy('created_at')
             ->get();
 
@@ -158,6 +192,9 @@ class ReportController extends Controller
             'id' => $sale->id,
             'created_at' => $sale->created_at->toIso8601String(),
             'payment_method' => $sale->payment_method,
+            'payment_label' => PaymentMethods::label($sale->payment_method),
+            'payment_reference' => $sale->payment_reference,
+            'cashier' => $sale->user?->name,
             'total_amount' => $sale->total_amount,
             'is_voided' => $sale->voided_at !== null,
             'items' => $sale->items->map(fn ($item) => [

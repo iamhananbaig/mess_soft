@@ -145,6 +145,7 @@ class SaleController extends Controller
             'from' => 'nullable|date',
             'to' => 'nullable|date',
             'user_id' => 'nullable|exists:users,id',
+            'payment_method' => 'nullable|string|max:20',
             'per_page' => 'sometimes|integer|min:1|max:100',
         ]);
 
@@ -160,6 +161,9 @@ class SaleController extends Controller
         }
         if ($validated['user_id'] ?? null) {
             $query->where('user_id', $validated['user_id']);
+        }
+        if ($validated['payment_method'] ?? null) {
+            $query->where('payment_method', $validated['payment_method']);
         }
 
         $perPage = min((int) ($validated['per_page'] ?? 20), 100);

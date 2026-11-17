@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\ActivityLogController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CashClosingController;
 use App\Http\Controllers\Api\CategoryController;
+use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\EmployeeController;
 use App\Http\Controllers\Api\InventoryController;
 use App\Http\Controllers\Api\ManualConsumptionController;
@@ -123,6 +124,8 @@ Route::prefix('v1')->group(function () {
             Route::get('/reports/waste', [ReportController::class, 'waste']);
             Route::get('/reports/stock-summary', [ReportController::class, 'stockSummary']);
             Route::get('/reports/ledger', [ReportController::class, 'ledger']);
+            Route::get('/reports/cashiers', [ReportController::class, 'cashiers']);
+            Route::get('/dashboard', [DashboardController::class, 'show']);
         });
 
         Route::middleware('permission:employees:view')->group(function () {
