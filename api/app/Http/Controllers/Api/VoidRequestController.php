@@ -7,6 +7,7 @@ use App\Models\InventoryItem;
 use App\Models\Sale;
 use App\Models\StockMovement;
 use App\Models\VoidRequest;
+use App\Support\Activity;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -61,6 +62,8 @@ class VoidRequestController extends Controller
                 'status' => VoidRequest::PENDING,
             ]);
 
+            Activity::log('void.requested', "Requested void of sale #{$sale->id} (Rs.{$sale->total_amount}): {$voidRequest->reason}", $sale);
+
             return response()->json($voidRequest->load(['requester:id,name']), 201);
         });
     }
@@ -114,6 +117,8 @@ class VoidRequestController extends Controller
                 'reviewed_at' => now(),
             ]);
 
+            Activity::log('void.approved', "Approved void of sale #{$sale->id} (Rs.{$sale->total_amount})", $sale);
+
             return response()->json($voidRequest->load(['sale', 'requester:id,name', 'reviewer:id,name']));
         });
     }
@@ -134,6 +139,8 @@ class VoidRequestController extends Controller
                 'review_note' => $validated['note'] ?? null,
                 'reviewed_at' => now(),
             ]);
+
+            Activity::log('void.rejected', "Rejected void of sale #{$voidRequest->sale_id}", $voidRequest);
 
             return response()->json($voidRequest->load(['requester:id,name', 'reviewer:id,name']));
         });

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Setting;
+use App\Support\Activity;
 use App\Support\PaymentMethods;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -32,7 +33,9 @@ class SettingController extends Controller
             'payment_methods.*' => ['string', 'distinct', Rule::in(PaymentMethods::keys())],
         ]);
 
+        $before = Setting::pos();
         Setting::setValue('pos', ['payment_methods' => array_values($validated['payment_methods'])]);
+        Activity::log('settings.pos', 'Changed POS payment methods', null, Activity::diff($before, Setting::pos()));
 
         return $this->pos();
     }
@@ -60,7 +63,9 @@ class SettingController extends Controller
         $validated['header_lines'] ??= '';
         $validated['footer_text'] ??= '';
 
+        $before = Setting::receipt();
         Setting::setValue('receipt', $validated);
+        Activity::log('settings.receipt', 'Changed receipt design', null, Activity::diff($before, Setting::receipt()));
 
         return response()->json(Setting::receipt());
     }

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Support\Activity;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Spatie\Permission\Models\Permission;
@@ -32,7 +33,13 @@ class PermissionController extends Controller
             'permissions.*' => 'string|exists:permissions,name',
         ]);
 
+        $before = $role->permissions->pluck('name')->sort()->values();
         $role->syncPermissions($validated['permissions']);
+        $after = collect($validated['permissions'])->sort()->values();
+        Activity::log('permissions.updated', "Changed permissions of role {$role->name}", null, [
+            'added' => $after->diff($before)->values()->all(),
+            'removed' => $before->diff($after)->values()->all(),
+        ]);
 
         return response()->json([
             'message' => "Permissions updated for {$role->name}",

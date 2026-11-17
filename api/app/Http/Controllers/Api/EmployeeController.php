@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Support\Activity;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -44,6 +45,8 @@ class EmployeeController extends Controller
             return $employee;
         });
 
+        Activity::log('employee.created', "Added employee {$employee->name} ({$employee->email}) as ".implode(', ', $roles), $employee);
+
         return response()->json($employee->load('roles:id,name'), 201);
     }
 
@@ -66,6 +69,7 @@ class EmployeeController extends Controller
 
         $employee->update(['password' => $validated['password']]);
         $employee->tokens()->delete();
+        Activity::log('employee.password_reset', "Changed password for {$employee->name}", $employee);
 
         return response()->json(['message' => "Password updated for {$employee->name}"]);
     }
@@ -85,7 +89,9 @@ class EmployeeController extends Controller
             'is_active' => 'sometimes|boolean',
         ]);
 
+        $before = $employee->only(array_keys($validated));
         $employee->update($validated);
+        Activity::log('employee.updated', "Updated employee {$employee->name}", $employee, Activity::diff($before, $employee->only(array_keys($validated))));
 
         // A deactivated user must be logged out everywhere, not just blocked at next login.
         if (array_key_exists('is_active', $validated) && ! $validated['is_active']) {
@@ -112,7 +118,10 @@ class EmployeeController extends Controller
             return $denied;
         }
 
+        $before = $employee->getRoleNames()->sort()->values()->all();
         $employee->syncRoles($roles);
+        $after = collect($roles)->sort()->values()->all();
+        Activity::log('employee.roles_changed', "Changed roles of {$employee->name}", $employee, Activity::diff(['roles' => $before], ['roles' => $after]));
 
         return response()->json($employee->load('roles:id,name'));
     }

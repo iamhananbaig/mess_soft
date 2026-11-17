@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Support\Activity;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -19,6 +20,8 @@ class AuthController extends Controller
         ]);
 
         if (! Auth::attempt($credentials)) {
+            Activity::log('auth.failed', "Failed sign-in for {$credentials['email']}", null, [], null);
+
             return response()->json(['message' => 'Invalid credentials'], 401);
         }
 
@@ -32,6 +35,7 @@ class AuthController extends Controller
         }
 
         $token = $user->createToken('auth-token')->plainTextToken;
+        Activity::log('auth.login', "{$user->name} signed in", $user, [], $user->id);
 
         return response()->json([
             'token' => $token,
@@ -65,6 +69,7 @@ class AuthController extends Controller
         $user = $request->user();
         $user->update(['password' => $validated['password']]);
         $user->tokens()->where('id', '!=', $user->currentAccessToken()->id)->delete();
+        Activity::log('auth.password_changed', "{$user->name} changed their password", $user);
 
         return response()->json(['message' => 'Password changed']);
     }

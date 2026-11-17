@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Category;
+use App\Support\Activity;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -12,6 +13,7 @@ class CategoryController extends Controller
     public function index(): JsonResponse
     {
         $categories = Category::orderBy('name')->get();
+
         return response()->json($categories);
     }
 
@@ -22,6 +24,8 @@ class CategoryController extends Controller
         ]);
 
         $category = Category::create($validated);
+        Activity::log('category.created', "Created category {$category->name}", $category);
+
         return response()->json($category, 201);
     }
 
@@ -33,10 +37,13 @@ class CategoryController extends Controller
     public function update(Request $request, Category $category): JsonResponse
     {
         $validated = $request->validate([
-            'name' => 'sometimes|string|max:255|unique:categories,name,' . $category->id,
+            'name' => 'sometimes|string|max:255|unique:categories,name,'.$category->id,
         ]);
 
+        $before = $category->only(array_keys($validated));
         $category->update($validated);
+        Activity::log('category.updated', "Updated category {$category->name}", $category, Activity::diff($before, $category->only(array_keys($validated))));
+
         return response()->json($category);
     }
 
@@ -46,6 +53,8 @@ class CategoryController extends Controller
             return response()->json(['message' => 'Cannot delete category with menu items'], 422);
         }
         $category->delete();
+        Activity::log('category.deleted', "Deleted category {$category->name}", $category);
+
         return response()->json(['message' => 'Category deleted']);
     }
 }

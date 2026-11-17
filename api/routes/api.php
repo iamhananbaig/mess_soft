@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\ActivityLogController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CashClosingController;
 use App\Http\Controllers\Api\CategoryController;
@@ -102,6 +103,11 @@ Route::prefix('v1')->group(function () {
         });
         Route::middleware('permission:consumptions:view')->group(function () {
             Route::get('/consumptions', [ManualConsumptionController::class, 'index']);
+        });
+
+        Route::middleware('permission:activity:view')->group(function () {
+            Route::get('/activity', [ActivityLogController::class, 'index']);
+            Route::get('/activity/actions', [ActivityLogController::class, 'actions']);
         });
 
         Route::get('/cash-closing', [CashClosingController::class, 'show'])

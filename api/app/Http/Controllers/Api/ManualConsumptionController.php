@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\InventoryItem;
 use App\Models\ManualConsumption;
 use App\Models\StockMovement;
+use App\Support\Activity;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -28,6 +29,7 @@ class ManualConsumptionController extends Controller
             }
 
             $item->decrement('current_stock', $validated['quantity']);
+            Activity::log('stock.consumed', "Consumed {$validated['quantity']} {$item->unit} {$item->name}: {$validated['reason']}", $item);
 
             ManualConsumption::create([
                 'inventory_item_id' => $item->id,

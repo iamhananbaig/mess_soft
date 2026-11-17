@@ -7,6 +7,7 @@ use App\Models\CashClosing;
 use App\Models\Sale;
 use App\Models\User;
 use App\Models\VoidRequest;
+use App\Support\Activity;
 use App\Support\PaymentMethods;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -125,7 +126,10 @@ class CashClosingController extends Controller
                 'closed_by' => $request->user()->id,
             ]);
 
-            return response()->json($closing->load(['cashier:id,name', 'closer:id,name']), 201);
+            $closing->load(['cashier:id,name', 'closer:id,name']);
+            Activity::log('cash.closed', "Closed {$closing->cashier->name}'s drawer for {$validated['date']}: counted Rs.{$closing->counted_cash}, variance Rs.{$closing->variance}", $closing);
+
+            return response()->json($closing, 201);
         });
     }
 

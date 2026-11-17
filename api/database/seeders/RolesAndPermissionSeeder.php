@@ -23,7 +23,7 @@ class RolesAndPermissionSeeder extends Seeder
             'consumptions:create', 'consumptions:view',
             'reports:view',
             'employees:view', 'employees:edit',
-            'settings:manage', 'cash:close',
+            'settings:manage', 'cash:close', 'activity:view',
         ];
 
         // Idempotent: the Docker entrypoint runs this seeder on every container start.
@@ -63,7 +63,7 @@ class RolesAndPermissionSeeder extends Seeder
                 'consumptions:create', 'consumptions:view',
                 'reports:view',
                 'employees:view', 'employees:edit',
-                'settings:manage', 'cash:close',
+                'settings:manage', 'cash:close', 'activity:view',
             ],
             'manager' => [
                 'pos:use',

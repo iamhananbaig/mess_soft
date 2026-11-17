@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\MenuItem;
+use App\Support\Activity;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -51,6 +52,7 @@ class MenuItemController extends Controller
         ]);
 
         $item = MenuItem::create($validated);
+        Activity::log('menu.created', "Created menu item {$item->name} at Rs.{$item->price}", $item);
 
         return response()->json($item->load('category'), 201);
     }
@@ -77,7 +79,9 @@ class MenuItemController extends Controller
             'is_active' => 'sometimes|boolean',
         ]);
 
+        $before = $menu->only(array_keys($validated));
         $menu->update($validated);
+        Activity::log('menu.updated', "Updated menu item {$menu->name}", $menu, Activity::diff($before, $menu->only(array_keys($validated))));
         $menu->load('category');
 
         return response()->json(array_merge($menu->toArray(), [
@@ -88,6 +92,7 @@ class MenuItemController extends Controller
     public function destroy(MenuItem $menu): JsonResponse
     {
         $menu->update(['is_active' => false]);
+        Activity::log('menu.deactivated', "Deactivated menu item {$menu->name}", $menu);
 
         return response()->json(['message' => 'Menu item deactivated']);
     }

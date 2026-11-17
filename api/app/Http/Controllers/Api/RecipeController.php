@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\MenuItem;
 use App\Models\Recipe;
+use App\Support\Activity;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -40,7 +41,10 @@ class RecipeController extends Controller
             'quantity' => $validated['quantity'],
         ]);
 
-        return response()->json($recipe->load('inventoryItem'), 201);
+        $recipe->load('inventoryItem');
+        Activity::log('recipe.added', "{$menuItem->name}: added {$recipe->quantity} {$recipe->inventoryItem->unit} {$recipe->inventoryItem->name}", $menuItem);
+
+        return response()->json($recipe, 201);
     }
 
     public function update(Request $request, Recipe $recipe): JsonResponse
@@ -49,13 +53,20 @@ class RecipeController extends Controller
             'quantity' => 'required|numeric|min:0.01',
         ]);
 
+        $before = $recipe->only(['quantity']);
         $recipe->update($validated);
+        $recipe->load(['inventoryItem', 'menuItem']);
+        Activity::log('recipe.updated', "{$recipe->menuItem->name}: {$recipe->inventoryItem->name} quantity changed", $recipe->menuItem, Activity::diff($before, $recipe->only(['quantity'])));
+
         return response()->json($recipe->load('inventoryItem'));
     }
 
     public function destroy(Recipe $recipe): JsonResponse
     {
+        $recipe->load(['inventoryItem', 'menuItem']);
         $recipe->delete();
+        Activity::log('recipe.removed', "{$recipe->menuItem->name}: removed {$recipe->inventoryItem->name}", $recipe->menuItem);
+
         return response()->json(['message' => 'Ingredient removed from recipe']);
     }
 }

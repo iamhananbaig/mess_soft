@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\InventoryItem;
 use App\Models\StockMovement;
+use App\Support\Activity;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -39,6 +40,7 @@ class InventoryController extends Controller
         $validated['avg_cost'] = $validated['unit_cost'] ?? 0;
         unset($validated['unit_cost']);
         $item = InventoryItem::create($validated);
+        Activity::log('inventory.created', "Created inventory item {$item->name} ({$item->unit})", $item);
 
         return response()->json($item, 201);
     }
@@ -55,7 +57,9 @@ class InventoryController extends Controller
             'is_active' => 'sometimes|boolean',
         ]);
 
+        $before = $inventory->only(array_keys($validated));
         $inventory->update($validated);
+        Activity::log('inventory.updated', "Updated inventory item {$inventory->name}", $inventory, Activity::diff($before, $inventory->only(array_keys($validated))));
 
         return response()->json($inventory);
     }
@@ -88,6 +92,8 @@ class InventoryController extends Controller
                 $extra['expiry_date'] = $validated['expiry_date'];
             }
             $item->increment('current_stock', $validated['quantity'], $extra);
+            Activity::log('stock.in', "Stock in: {$validated['quantity']} {$item->unit} {$item->name}"
+                .($unitCost !== null ? " @ Rs.{$unitCost}" : '').(! empty($validated['reference']) ? " (ref {$validated['reference']})" : ''), $item);
 
             StockMovement::create([
                 'inventory_item_id' => $item->id,
@@ -119,6 +125,8 @@ class InventoryController extends Controller
             }
 
             $item->increment('current_stock', $validated['quantity']);
+            Activity::log('stock.adjusted', "Adjusted {$item->name} by {$validated['quantity']} {$item->unit}"
+                .(! empty($validated['note']) ? ": {$validated['note']}" : ''), $item);
 
             StockMovement::create([
                 'inventory_item_id' => $item->id,
@@ -149,6 +157,7 @@ class InventoryController extends Controller
             }
 
             $item->decrement('current_stock', $validated['quantity']);
+            Activity::log('stock.expired', "Expired {$validated['quantity']} {$item->unit} {$item->name}", $item);
 
             StockMovement::create([
                 'inventory_item_id' => $item->id,
