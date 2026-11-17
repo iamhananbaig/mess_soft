@@ -24,7 +24,7 @@ export function SlipPreview({ bytes, className }: { bytes: Uint8Array; className
             {line.runs.map((run, j) => (
               <span
                 key={j}
-                className={run.bold ? 'font-bold' : undefined}
+                className={[run.bold && 'font-bold', run.underline && 'underline decoration-2 underline-offset-[3px]'].filter(Boolean).join(' ') || undefined}
                 style={run.w > 1 || run.h > 1 ? { fontSize: `${run.h}em`, letterSpacing: `${run.w - run.h}ch`, lineHeight: 1.2 } : undefined}
               >
                 {run.text}
