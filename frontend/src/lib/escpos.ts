@@ -202,12 +202,12 @@ function wrap(str: string, width: number): string[] {
  * for Font A falls back to the body font, wrapped, never truncated.
  * Leaves alignment centred and restores the body font.
  */
-function heading(str: string, profile: EscPosProfile): Uint8Array {
+function heading(str: string, profile: EscPosProfile, size: TextSize = 'xlarge'): Uint8Array {
   const safeA = columnsFor(profile.printWidthDots, 'A') - 3;
   const parts: Uint8Array[] = [align('center'), bold(true)];
-  if (str.length * 2 <= safeA) {
+  if (size === 'xlarge' && str.length * 2 <= safeA) {
     parts.push(selectFontA(), doubleWidth(true), text(str + '\n'), doubleWidth(false));
-  } else if (str.length <= safeA) {
+  } else if (size !== 'normal' && str.length <= safeA) {
     parts.push(selectFontA(), text(str + '\n'));
   } else {
     parts.push(selectFont(profile.font), text(wrap(str, profile.columns - 3).join('\n') + '\n'));
@@ -234,7 +234,35 @@ export interface ReceiptSettings {
   /** 80mm only: printable width in mm. 64 fits every head; widen with test prints. */
   print_width_mm: (typeof PRINT_WIDTHS_80MM)[number];
   tear_feed_lines: number;
+  // ── Layout ──
+  sep_after_header: Separator;
+  sep_after_copy: Separator;
+  /** Around the item table (after the info lines, under the column header, after the items). */
+  sep_items: Separator;
+  /** Above and below TOTAL. */
+  sep_total: Separator;
+  sep_before_footer: Separator;
+  /** Last line before the tear line / cut. */
+  sep_end: Separator;
+  /** Blank lines (0–3). */
+  space_before_payment: number;
+  space_after_payment: number;
+  title_size: TextSize;
+  copy_label_size: TextSize;
+  total_size: TextSize;
+  show_item_header: boolean;
+  show_receipt_number: boolean;
+  show_datetime: boolean;
+  show_tear_line: boolean;
+  /** Printed copy labels; empty falls back to CUSTOMER COPY / ACCOUNTS COPY. */
+  customer_copy_label: string;
+  accounts_copy_label: string;
 }
+
+/** Separator line style: === , --- , - - - , or nothing. */
+export type Separator = '=' | '-' | 'dash' | 'none';
+/** normal = body font, bold · large = big font · xlarge = big font, double width (double height for TOTAL). */
+export type TextSize = 'normal' | 'large' | 'xlarge';
 
 /** Defaults for the canteen's Speed-X BT600M (80mm). */
 export const DEFAULT_RECEIPT_SETTINGS: ReceiptSettings = {
@@ -249,6 +277,23 @@ export const DEFAULT_RECEIPT_SETTINGS: ReceiptSettings = {
   text_size: 'large',
   print_width_mm: 64,
   tear_feed_lines: TEAR_FEED_LINES,
+  sep_after_header: '=',
+  sep_after_copy: '=',
+  sep_items: '-',
+  sep_total: '=',
+  sep_before_footer: 'none',
+  sep_end: '=',
+  space_before_payment: 0,
+  space_after_payment: 0,
+  title_size: 'xlarge',
+  copy_label_size: 'xlarge',
+  total_size: 'xlarge',
+  show_item_header: true,
+  show_receipt_number: true,
+  show_datetime: true,
+  show_tear_line: true,
+  customer_copy_label: RECEIPT_COPY_LABELS.customer,
+  accounts_copy_label: RECEIPT_COPY_LABELS.accounts,
 };
 
 export function profileForPaper(
@@ -310,13 +355,18 @@ export function encodeReceipt(data: ReceiptData, options: EncodeReceiptOptions):
   // Bold so the thin '-'/'=' glyphs stay visible, but only SAFE_W long (like the
   // bold TOTAL line): a bold or underlined line reaching the right edge hangs the BT600M.
   const rule = (char: string) => concat(bold(true), text(line(char, SAFE_W) + '\n'), bold(false));
+  const sep = (style: Separator): Uint8Array =>
+    style === 'none' ? new Uint8Array(0)
+    : style === 'dash' ? concat(bold(true), text(line('- ', SAFE_W).slice(0, SAFE_W).trimEnd() + '\n'), bold(false))
+    : rule(style);
+  const blank = (n: number) => (n > 0 ? feedLines(Math.min(3, n)) : new Uint8Array(0));
 
   parts.push(initialize());
   parts.push(selectFont(profile.font));
   parts.push(setPrintWidth(profile.printWidthDots));
 
   // Header
-  parts.push(heading(`*** ${canteenName} ***`, profile));
+  parts.push(heading(`*** ${canteenName} ***`, profile, settings.title_size));
 
   if (settings.show_branch && settings.branch_name) {
     parts.push(text(settings.branch_name + '\n'));
@@ -324,7 +374,7 @@ export function encodeReceipt(data: ReceiptData, options: EncodeReceiptOptions):
   for (const headerLine of settings.header_lines.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).slice(0, 3)) {
     parts.push(text(headerLine + '\n'));
   }
-  parts.push(rule('='));
+  parts.push(sep(settings.sep_after_header));
 
   // Voided sale reprint — impossible to miss
   if (data.voided) {
@@ -338,60 +388,73 @@ export function encodeReceipt(data: ReceiptData, options: EncodeReceiptOptions):
   }
 
   // Copy label — prominent so customer and accounts slips are never mixed up
-  parts.push(heading(RECEIPT_COPY_LABELS[copy], profile));
-  parts.push(rule('='));
+  const copyLabel = (copy === 'customer' ? settings.customer_copy_label : settings.accounts_copy_label)?.trim();
+  parts.push(heading(copyLabel || RECEIPT_COPY_LABELS[copy], profile, settings.copy_label_size));
+  parts.push(sep(settings.sep_after_copy));
 
   // Info
   parts.push(align('left'));
   const status = reprint ? 'DUPLICATE' : 'ORIGINAL';
-  parts.push(text(twoColumns(`#${data.receipt_number}`, `${data.date}  ${data.time}`, SAFE_W)));
+  const number = settings.show_receipt_number ? `#${data.receipt_number}` : '';
+  const when = settings.show_datetime ? `${data.date}  ${data.time}` : '';
+  if (number || when) parts.push(text(twoColumns(number, when, SAFE_W)));
   parts.push(text(settings.show_cashier ? twoColumns(`Cashier: ${data.cashier}`, status, SAFE_W) : padLeft(status, SAFE_W) + '\n'));
-  parts.push(rule('-'));
+  parts.push(sep(settings.sep_items));
 
   // Items — the name column absorbs extra width on 80mm paper
   const qtyCol = 11;
   const amtCol = 10;
   const itemCol = SAFE_W - qtyCol - amtCol;
-  parts.push(text(padRight('Item', itemCol) + padRight('Qty x Rate', qtyCol) + padLeft('= Amt', amtCol) + '\n'));
-  parts.push(rule('-'));
+  if (settings.show_item_header) {
+    parts.push(text(padRight('Item', itemCol) + padRight('Qty x Rate', qtyCol) + padLeft('= Amt', amtCol) + '\n'));
+    parts.push(sep(settings.sep_items));
+  }
   for (const item of data.items) {
     // Long names wrap onto extra lines under the first — never cut short.
     const [first, ...rest] = wrap(item.name, itemCol - 1);
     parts.push(text(padRight(first, itemCol) + padRight(`${item.quantity} x ${item.rate}`, qtyCol) + padLeft(String(item.amount), amtCol) + '\n'));
     for (const more of rest) parts.push(text(more + '\n'));
   }
-  parts.push(rule('-'));
+  parts.push(sep(settings.sep_items));
 
-  // Total — financial amounts are never truncated
-  parts.push(rule('='));
-  // Large font, double height: same width rule as other bold lines (3 chars short).
-  const totalW = columnsFor(profile.printWidthDots, 'A') - 3;
+  // Total — financial amounts are never truncated. Same width rule as other
+  // bold lines (3 chars short of the edge) in whichever font is used.
+  parts.push(sep(settings.sep_total));
+  const big = settings.total_size !== 'normal';
+  const totalW = big ? columnsFor(profile.printWidthDots, 'A') - 3 : SAFE_W;
   const totalLabel = 'TOTAL';
   const totalText = `Rs.${commas(data.total)}`;
-  parts.push(selectFontA(), bold(true), doubleHeight(true));
+  if (big) parts.push(selectFontA());
+  parts.push(bold(true));
+  if (settings.total_size === 'xlarge') parts.push(doubleHeight(true));
   parts.push(text(totalLabel + ' '.repeat(Math.max(1, totalW - totalLabel.length - totalText.length)) + totalText + '\n'));
-  parts.push(doubleHeight(false), bold(false), selectFont(profile.font));
-  parts.push(rule('='));
+  if (settings.total_size === 'xlarge') parts.push(doubleHeight(false));
+  parts.push(bold(false));
+  if (big) parts.push(selectFont(profile.font));
+  parts.push(sep(settings.sep_total));
 
   // Payment
   if (settings.show_payment) {
+    parts.push(blank(settings.space_before_payment));
     if (isCash && data.amount_received !== null) {
       parts.push(text(twoColumns(`Paid: Rs.${commas(data.amount_received)}`, `Change: Rs.${commas(data.change ?? 0)}`, SAFE_W)));
     } else {
       parts.push(text(`Paid by: ${data.payment_method}\n`));
       if (data.payment_reference) parts.push(text(`Ref: ${data.payment_reference}\n`));
     }
+    parts.push(blank(settings.space_after_payment));
   }
 
   // Footer
   if (settings.footer_text) {
+    parts.push(sep(settings.sep_before_footer));
     parts.push(align('center'));
     parts.push(bold(true));
     parts.push(text(settings.footer_text + '\n'));
     parts.push(bold(false));
   }
   parts.push(align('left'));
-  parts.push(rule('='));
+  parts.push(sep(settings.sep_end));
 
   if (autoCut) {
     parts.push(feedLines(3));
@@ -400,8 +463,10 @@ export function encodeReceipt(data: ReceiptData, options: EncodeReceiptOptions):
     // No cutter: tear guide, then feed so this copy clears the tear bar
     // before the next copy starts printing.
     parts.push(feedLines(1));
-    parts.push(align('center'));
-    parts.push(text('- - - - - -  TEAR HERE  - - - - - -\n'));
+    if (settings.show_tear_line) {
+      parts.push(align('center'));
+      parts.push(text('- - - - - -  TEAR HERE  - - - - - -\n'));
+    }
     parts.push(feedLines(settings.tear_feed_lines));
   }
 

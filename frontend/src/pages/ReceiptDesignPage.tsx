@@ -3,7 +3,7 @@ import api from '@/services/api';
 import { printer } from '@/services/printer';
 import { useAuth } from '@/contexts/AuthContext';
 import { showToast, showErrorToast } from '@/lib/toast';
-import { encodeReceiptCopies, PRINT_WIDTHS_80MM, profileForPaper, type ReceiptSettings } from '@/lib/escpos';
+import { encodeReceiptCopies, PRINT_WIDTHS_80MM, profileForPaper, type ReceiptSettings, type Separator, type TextSize } from '@/lib/escpos';
 import { fetchReceiptSettings, setReceiptSettingsCache } from '@/hooks/useReceiptSettings';
 import type { ReceiptCopy, ReceiptData } from '@/types/receipt';
 import { Button } from '@/components/ui/button';
@@ -50,6 +50,40 @@ function Toggle({ label, hint, checked, onChange }: { label: string; hint?: stri
     </label>
   );
 }
+
+/** Small segmented control: one button per option. */
+function Choice<T extends string | number>({ label, value, options, onChange }: {
+  label: string;
+  value: T;
+  options: readonly (readonly [T, string])[];
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <span className="text-sm">{label}</span>
+      <div className="flex gap-1">
+        {options.map(([v, l]) => (
+          <Button key={String(v)} type="button" size="sm" className="h-7 px-2 text-xs font-mono" variant={value === v ? 'default' : 'outline'} onClick={() => onChange(v)}>
+            {l}
+          </Button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const SEPARATOR_OPTIONS = [['=', '==='], ['-', '---'], ['dash', '- - -'], ['none', 'None']] as const satisfies readonly (readonly [Separator, string])[];
+const SIZE_OPTIONS = [['normal', 'Normal'], ['large', 'Large'], ['xlarge', 'Extra large']] as const satisfies readonly (readonly [TextSize, string])[];
+const SPACE_OPTIONS = [[0, '0'], [1, '1'], [2, '2'], [3, '3']] as const;
+
+const SEPARATOR_ROWS: [keyof ReceiptSettings & `sep_${string}`, string][] = [
+  ['sep_after_header', 'After header'],
+  ['sep_after_copy', 'After copy label'],
+  ['sep_items', 'Around items'],
+  ['sep_total', 'Around total'],
+  ['sep_before_footer', 'Before footer'],
+  ['sep_end', 'Last line'],
+];
 
 export function ReceiptDesignPage() {
   const { hasPermission } = useAuth();
@@ -158,9 +192,48 @@ export function ReceiptDesignPage() {
             <CardContent className="space-y-4">
               <Toggle label="Show cashier name" checked={form.show_cashier} onChange={(v) => set('show_cashier', v)} />
               <Toggle label="Show paid / change" checked={form.show_payment} onChange={(v) => set('show_payment', v)} />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <FormField label="Customer copy label">
+                  <Input value={form.customer_copy_label ?? ''} maxLength={30} placeholder="CUSTOMER COPY" onChange={(e) => set('customer_copy_label', e.target.value)} />
+                </FormField>
+                <FormField label="Accounts copy label">
+                  <Input value={form.accounts_copy_label ?? ''} maxLength={30} placeholder="ACCOUNTS COPY" onChange={(e) => set('accounts_copy_label', e.target.value)} />
+                </FormField>
+              </div>
               <FormField label="Footer message (leave empty to hide)">
                 <Input value={form.footer_text} maxLength={120} onChange={(e) => set('footer_text', e.target.value)} />
               </FormField>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader><CardTitle className="text-base">Layout</CardTitle></CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Text size</p>
+                <Choice label="Canteen name" value={form.title_size} options={SIZE_OPTIONS} onChange={(v) => set('title_size', v)} />
+                <Choice label="Copy label" value={form.copy_label_size} options={SIZE_OPTIONS} onChange={(v) => set('copy_label_size', v)} />
+                <Choice label="Total" value={form.total_size} options={SIZE_OPTIONS} onChange={(v) => set('total_size', v)} />
+                <p className="text-xs text-muted-foreground">Text too long for the chosen size falls back to a smaller one — it is never cut off.</p>
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Separator lines</p>
+                {SEPARATOR_ROWS.map(([key, label]) => (
+                  <Choice key={key} label={label} value={form[key]} options={SEPARATOR_OPTIONS} onChange={(v) => set(key, v)} />
+                ))}
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Blank lines</p>
+                <Choice label="Above paid / change" value={form.space_before_payment} options={SPACE_OPTIONS} onChange={(v) => set('space_before_payment', v)} />
+                <Choice label="Below paid / change" value={form.space_after_payment} options={SPACE_OPTIONS} onChange={(v) => set('space_after_payment', v)} />
+              </div>
+              <div className="space-y-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Show</p>
+                <Toggle label="Receipt number" checked={form.show_receipt_number} onChange={(v) => set('show_receipt_number', v)} />
+                <Toggle label="Date and time" checked={form.show_datetime} onChange={(v) => set('show_datetime', v)} />
+                <Toggle label="Item column header" hint="Item / Qty x Rate / Amt" checked={form.show_item_header} onChange={(v) => set('show_item_header', v)} />
+                <Toggle label="TEAR HERE line" hint="Printers without an auto-cutter" checked={form.show_tear_line} onChange={(v) => set('show_tear_line', v)} />
+              </div>
             </CardContent>
           </Card>
 

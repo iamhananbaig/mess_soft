@@ -62,6 +62,22 @@ class ReceiptSettingsTest extends TestCase
         $this->withHeaders($headers)->putJson('/api/v1/settings/receipt', $this->valid)->assertForbidden();
     }
 
+    public function test_layout_options_save_and_validate(): void
+    {
+        $layout = [
+            'sep_items' => 'dash', 'sep_before_footer' => '-', 'sep_end' => 'none',
+            'space_before_payment' => 2, 'title_size' => 'normal', 'total_size' => 'large',
+            'show_item_header' => false, 'show_tear_line' => false,
+            'customer_copy_label' => 'CUSTOMER', 'accounts_copy_label' => 'OFFICE COPY',
+        ];
+        $this->withHeaders($this->authHeaders())->putJson('/api/v1/settings/receipt', $layout + $this->valid)
+            ->assertOk()->assertJson($layout + ['sep_after_header' => '=', 'copy_label_size' => 'xlarge']);
+
+        $this->withHeaders($this->authHeaders())
+            ->putJson('/api/v1/settings/receipt', ['sep_items' => '*', 'space_after_payment' => 9, 'total_size' => 'huge', 'accounts_copy_label' => str_repeat('A', 31)] + $this->valid)
+            ->assertUnprocessable()->assertJsonValidationErrors(['sep_items', 'space_after_payment', 'total_size', 'accounts_copy_label']);
+    }
+
     public function test_validation(): void
     {
         $this->withHeaders($this->authHeaders())

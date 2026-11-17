@@ -12,6 +12,9 @@ use Illuminate\Validation\Rule;
 
 class SettingController extends Controller
 {
+    /** Receipt separator styles: === , --- , - - - (dash) or none. */
+    private const SEPARATORS = ['=', '-', 'dash', 'none'];
+
     /** Every signed-in user needs this to print. */
     public function receipt(): JsonResponse
     {
@@ -58,11 +61,34 @@ class SettingController extends Controller
             'text_size' => 'sometimes|in:large,compact',
             'print_width_mm' => 'sometimes|integer|in:64,66,68,70,72',
             'tear_feed_lines' => 'required|integer|min:0|max:12',
+            'sep_after_header' => ['sometimes', Rule::in(self::SEPARATORS)],
+            'sep_after_copy' => ['sometimes', Rule::in(self::SEPARATORS)],
+            'sep_items' => ['sometimes', Rule::in(self::SEPARATORS)],
+            'sep_total' => ['sometimes', Rule::in(self::SEPARATORS)],
+            'sep_before_footer' => ['sometimes', Rule::in(self::SEPARATORS)],
+            'sep_end' => ['sometimes', Rule::in(self::SEPARATORS)],
+            'space_before_payment' => 'sometimes|integer|min:0|max:3',
+            'space_after_payment' => 'sometimes|integer|min:0|max:3',
+            'title_size' => 'sometimes|in:normal,large,xlarge',
+            'copy_label_size' => 'sometimes|in:normal,large,xlarge',
+            'total_size' => 'sometimes|in:normal,large,xlarge',
+            'show_item_header' => 'sometimes|boolean',
+            'show_receipt_number' => 'sometimes|boolean',
+            'show_datetime' => 'sometimes|boolean',
+            'show_tear_line' => 'sometimes|boolean',
+            'customer_copy_label' => 'sometimes|nullable|string|max:30',
+            'accounts_copy_label' => 'sometimes|nullable|string|max:30',
         ]);
 
         $validated['branch_name'] ??= '';
         $validated['header_lines'] ??= '';
         $validated['footer_text'] ??= '';
+        // An emptied copy label goes back to its default.
+        foreach (['customer_copy_label', 'accounts_copy_label'] as $key) {
+            if (array_key_exists($key, $validated) && blank($validated[$key])) {
+                unset($validated[$key]);
+            }
+        }
 
         $before = Setting::receipt();
         Setting::setValue('receipt', $validated);

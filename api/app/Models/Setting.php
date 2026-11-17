@@ -55,6 +55,28 @@ class Setting extends Model
             // BT600M crashed at 72, so it is tuned up from here with test prints.
             'print_width_mm' => 64,
             'tear_feed_lines' => 4,
+            // Layout (Settings → Receipt layout). Defaults reproduce the standard slip.
+            // Separators: '=' | '-' | 'dash' (- - -) | 'none'.
+            'sep_after_header' => '=',
+            'sep_after_copy' => '=',
+            'sep_items' => '-',
+            'sep_total' => '=',
+            'sep_before_footer' => 'none',
+            'sep_end' => '=',
+            // Blank lines (0–3).
+            'space_before_payment' => 0,
+            'space_after_payment' => 0,
+            // 'normal' | 'large' | 'xlarge'.
+            'title_size' => 'xlarge',
+            'copy_label_size' => 'xlarge',
+            'total_size' => 'xlarge',
+            'show_item_header' => true,
+            'show_receipt_number' => true,
+            'show_datetime' => true,
+            'show_tear_line' => true,
+            // Printed copy labels; empty falls back to the default on the slip.
+            'customer_copy_label' => 'CUSTOMER COPY',
+            'accounts_copy_label' => 'ACCOUNTS COPY',
         ];
 
         return array_merge($defaults, array_intersect_key(static::getValue('receipt'), $defaults));
