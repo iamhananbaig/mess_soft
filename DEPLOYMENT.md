@@ -251,7 +251,23 @@ docker compose logs api | tail -30
 
 ## 9. Backups
 
-### Database Backup
+### Automated nightly backups (recommended)
+
+`deploy/backup.sh` dumps the database (and checks the dump is complete), archives the app
+storage volume, keeps 14 days, and can copy everything to another machine:
+
+```bash
+sudo install -m 700 deploy/backup.sh /usr/local/bin/mess_soft-backup
+sudo install -m 600 deploy/backup.conf.example /etc/mess_soft-backup.conf   # edit: REMOTE_TARGET etc.
+sudo sh -c 'printf "[client]\nuser=root\npassword=YOUR_ROOT_PW\n" > /root/.my.cnf && chmod 600 /root/.my.cnf'
+sudo /usr/local/bin/mess_soft-backup          # test once by hand
+sudo crontab -e   # add:  15 2 * * * /usr/local/bin/mess_soft-backup >> /var/log/mess_soft-backup.log 2>&1
+```
+
+Set `REMOTE_TARGET` — a backup on the same disk doesn't survive a dead VM. Check the log
+now and then, and test a restore on a spare database once.
+
+### Database Backup (manual)
 
 ```bash
 # Manual backup (native MySQL on the VM)

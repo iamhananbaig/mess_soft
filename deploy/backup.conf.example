@@ -1,0 +1,11 @@
+# /etc/mess_soft-backup.conf — read by /usr/local/bin/mess_soft-backup (chmod 600)
+DB_NAME=mess_soft
+BACKUP_DIR=/var/backups/mess_soft
+RETENTION_DAYS=14
+# [client] user=... password=... (chmod 600). Use a read-only backup user if you like:
+#   CREATE USER 'backup'@'localhost' IDENTIFIED BY '...';
+#   GRANT SELECT, SHOW VIEW, TRIGGER, LOCK TABLES, EVENT, PROCESS ON *.* TO 'backup'@'localhost';
+MYSQL_DEFAULTS_FILE=/root/.my.cnf
+STORAGE_VOLUME=mess-soft_storage
+# Strongly recommended: copy backups to another machine (needs SSH key auth for root)
+REMOTE_TARGET=
