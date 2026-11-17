@@ -75,5 +75,6 @@ interface Navigator {
   serial?: {
     requestPort(options?: SerialOptions): Promise<SerialPort>;
     getPorts(): Promise<SerialPort[]>;
+    addEventListener(type: 'connect' | 'disconnect', listener: (event: Event) => void): void;
   };
 }

@@ -1,3 +1,11 @@
+/** Which copy of the receipt is being printed. */
+export type ReceiptCopy = 'customer' | 'accounts';
+
+export const RECEIPT_COPY_LABELS: Record<ReceiptCopy, string> = {
+  customer: 'CUSTOMER COPY',
+  accounts: 'ACCOUNTS COPY',
+};
+
 export interface ReceiptData {
   canteen_name: string;
   branch_name: string;

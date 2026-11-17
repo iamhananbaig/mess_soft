@@ -7,7 +7,7 @@
 // garbled output on most thermal printers — this is a hardware limitation.
 // Avoid introducing invalid ESC/POS byte sequences from user-supplied text.
 
-import type { ReceiptData } from '@/types/receipt';
+import { RECEIPT_COPY_LABELS, type ReceiptCopy, type ReceiptData } from '@/types/receipt';
 
 const TEXT_ENCODER = new TextEncoder();
 
@@ -22,6 +22,14 @@ export const DEFAULT_ESC_POS_PROFILE: EscPosProfile = {
   printWidthDots: 384, // 58mm paper — safe default for most POS printers
   fontBColumns: 42,    // 384 / 9 (Font B dot width)
 };
+
+/**
+ * Blank lines fed after the tear guide when the printer has no cutter. The tear
+ * bar sits a few lines above the print head; this pushes the guide just past it.
+ * Increase if the tear line stays inside the printer, decrease if there is too
+ * much blank paper.
+ */
+const TEAR_FEED_LINES = 4;
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -123,10 +131,30 @@ function line(char: string, width: number): string {
 
 // ── Receipt encoder ──────────────────────────────────────────────────
 
-export function encodeReceipt(
+export interface EncodeReceiptOptions {
+  /** Copy label printed under the header (e.g. CUSTOMER COPY). */
+  copy: ReceiptCopy;
+  /** Reprint of an earlier sale — marked DUPLICATE instead of ORIGINAL. */
+  reprint?: boolean;
+  profile?: EscPosProfile;
+  /**
+   * Printer has an auto-cutter. When false, no cut command is sent; instead a
+   * tear guide is printed and the paper is fed past the tear bar.
+   */
+  autoCut?: boolean;
+}
+
+/** Encode several copies of one receipt into a single job, each ending in a cut. */
+export function encodeReceiptCopies(
   data: ReceiptData,
-  profile: EscPosProfile = DEFAULT_ESC_POS_PROFILE,
+  copies: ReceiptCopy[],
+  options: Omit<EncodeReceiptOptions, 'copy'> = {},
 ): Uint8Array {
+  return concat(...copies.map((copy) => encodeReceipt(data, { ...options, copy })));
+}
+
+export function encodeReceipt(data: ReceiptData, options: EncodeReceiptOptions): Uint8Array {
+  const { copy, reprint = false, profile = DEFAULT_ESC_POS_PROFILE, autoCut = false } = options;
   const parts: Uint8Array[] = [];
   const isCash = data.payment_method === 'Cash';
   const W = profile.fontBColumns;
@@ -156,6 +184,16 @@ export function encodeReceipt(
   parts.push(text(line('=', W)));
   parts.push(newline());
 
+  // Copy label — prominent so customer and accounts slips are never mixed up
+  parts.push(bold(true));
+  parts.push(doubleWidth(true));
+  parts.push(text(RECEIPT_COPY_LABELS[copy]));
+  parts.push(newline());
+  parts.push(doubleWidth(false));
+  parts.push(bold(false));
+  parts.push(text(line('=', W)));
+  parts.push(newline());
+
   // Info
   parts.push(align('left'));
   const halfInfo = Math.floor(SAFE_W / 2);
@@ -169,7 +207,7 @@ export function encodeReceipt(
   parts.push(
     text(
       padRight(`Cashier: ${data.cashier}`, halfInfo) +
-        padLeft(data.receipt_number ? 'ORIGINAL' : '', halfInfo) +
+        padLeft(reprint ? 'DUPLICATE' : 'ORIGINAL', halfInfo) +
         '\n'
     )
   );
@@ -218,14 +256,6 @@ export function encodeReceipt(
   const totalText = `Rs.${commas(data.total)}`;
   const totalSpaces = Math.max(1, SAFE_W - totalLabel.length - totalText.length);
 
-  console.debug({
-    total: data.total,
-    totalText,
-    W,
-    SAFE_W,
-    renderedLength: totalLabel.length + totalSpaces + totalText.length,
-  });
-
   parts.push(
     text(
       totalLabel +
@@ -262,9 +292,17 @@ export function encodeReceipt(
   parts.push(bold(false));
   parts.push(text(line('=', W) + '\n'));
 
-  // Cut
-  parts.push(feedLines(3));
-  parts.push(cut('partial'));
+  if (autoCut) {
+    parts.push(feedLines(3));
+    parts.push(cut('partial'));
+  } else {
+    // No cutter: tear guide, then feed so this copy clears the tear bar
+    // before the next copy starts printing.
+    parts.push(feedLines(1));
+    parts.push(align('center'));
+    parts.push(text('- - - - - -  TEAR HERE  - - - - - -\n'));
+    parts.push(feedLines(TEAR_FEED_LINES));
+  }
 
   return concat(...parts);
 }

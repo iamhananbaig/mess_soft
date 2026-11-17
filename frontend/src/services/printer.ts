@@ -1,6 +1,5 @@
-import { encodeReceipt } from '@/lib/escpos';
-import { printReceipt as browserPrint } from '@/lib/browserPrint';
-import type { ReceiptData } from '@/types/receipt';
+import { encodeReceiptCopies } from '@/lib/escpos';
+import type { ReceiptCopy, ReceiptData } from '@/types/receipt';
 
 const STORAGE_KEY = 'printer_config';
 
@@ -19,6 +18,17 @@ const BLE_PRINTER_SERVICES = [
  */
 const DEFAULT_BLE_WRITE_CHUNK_SIZE = 20;
 
+/**
+ * Pause between write-without-response chunks. Without it, cheap BLE
+ * printers overflow their buffer and drop data (cut-off or blank slips).
+ */
+const BLE_CHUNK_DELAY_MS = 8;
+
+/** Attempts to re-establish a dropped BLE link before giving up. */
+const BLE_AUTO_RECONNECT_ATTEMPTS = 3;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const DEFAULT_BAUD_RATE = 9600;
 
 // ── Config ───────────────────────────────────────────────────────────
@@ -34,6 +44,8 @@ interface PrinterConfig {
   usbProductId?: number;
   /** Serial baud rate (default 9600). */
   baudRate?: number;
+  /** Printer has an auto-cutter (default false: tear-off). */
+  autoCut?: boolean;
 }
 
 // ── Service ──────────────────────────────────────────────────────────
@@ -43,9 +55,44 @@ class PrinterService {
   private bluetoothCharacteristic: BluetoothRemoteGATTCharacteristic | null = null;
   private serialPort: SerialPort | null = null;
   private config: PrinterConfig = { type: null, name: '' };
+  private listeners = new Set<() => void>();
+  private reconnecting: Promise<boolean> | null = null;
+  private manualDisconnect = false;
 
   constructor() {
     this.loadConfig();
+    this.watchSerialHotplug();
+  }
+
+  // ── Status subscription ──────────────────────────────────────────
+
+  /** Subscribe to connection changes. Returns an unsubscribe function. */
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  private notify() {
+    this.listeners.forEach((l) => l());
+  }
+
+  /**
+   * Re-open a USB printer automatically when its cable is plugged back in,
+   * and drop the stale port when it's unplugged.
+   */
+  private watchSerialHotplug() {
+    if (!this.isWebSerialAvailable) return;
+    navigator.serial!.addEventListener('disconnect', (event) => {
+      if (event.target === this.serialPort) {
+        this.serialPort = null;
+        this.notify();
+      }
+    });
+    navigator.serial!.addEventListener('connect', () => {
+      if (this.config.type === 'serial' && !this.isConnected) {
+        void this.reconnect();
+      }
+    });
   }
 
   // ── Persistence ──────────────────────────────────────────────────
@@ -75,8 +122,23 @@ class PrinterService {
     return this.config.type;
   }
 
+  get autoCut(): boolean {
+    return this.config.autoCut ?? false;
+  }
+
+  set autoCut(value: boolean) {
+    this.config.autoCut = value;
+    this.saveConfig();
+    this.notify();
+  }
+
   get printerName(): string {
     return this.config.name;
+  }
+
+  /** A direct printer has been set up on this device (connected or not). */
+  get isConfigured(): boolean {
+    return this.config.type !== null;
   }
 
   get isConnected(): boolean {
@@ -141,9 +203,13 @@ class PrinterService {
   /** Register the BLE disconnect handler that preserves config for reconnect. */
   private registerBleDisconnectHandler(device: BluetoothDevice) {
     device.addEventListener('gattserverdisconnected', () => {
-      // Clear runtime objects only — keep config so reconnect() can restore
-      this.bluetoothDevice = null;
+      // Clear the characteristic only — keep the device and config so we can
+      // reconnect without the user having to pick the printer again.
       this.bluetoothCharacteristic = null;
+      this.notify();
+      if (!this.manualDisconnect && this.config.type === 'bluetooth') {
+        void this.autoReconnectBluetooth(device);
+      }
     });
   }
 
@@ -170,13 +236,16 @@ class PrinterService {
       this.bluetoothDevice = device;
       this.bluetoothCharacteristic = characteristic;
       this.config = {
+        autoCut: this.config.autoCut,
         type: 'bluetooth',
         name: device.name ?? 'Bluetooth Printer',
         id: device.id,
       };
       this.saveConfig();
 
+      this.manualDisconnect = false;
       this.registerBleDisconnectHandler(device);
+      this.notify();
 
       return true;
     } catch (err) {
@@ -184,6 +253,28 @@ class PrinterService {
         return false;
       }
       throw err;
+    }
+  }
+
+  /** Retry a dropped BLE link with backoff (printer went to sleep, out of range, etc). */
+  private async autoReconnectBluetooth(device: BluetoothDevice) {
+    for (let attempt = 1; attempt <= BLE_AUTO_RECONNECT_ATTEMPTS; attempt++) {
+      await sleep(1000 * attempt);
+      if (this.manualDisconnect || this.isConnected) return;
+      if (await this.connectGatt(device)) return;
+    }
+  }
+
+  private async connectGatt(device: BluetoothDevice): Promise<boolean> {
+    if (!device.gatt) return false;
+    try {
+      const server = await device.gatt.connect();
+      this.bluetoothCharacteristic = await this.findBluetoothWriteCharacteristic(server);
+      this.bluetoothDevice = device;
+      this.notify();
+      return true;
+    } catch {
+      return false;
     }
   }
 
@@ -199,6 +290,7 @@ class PrinterService {
       this.serialPort = port;
       const info = port.getInfo();
       this.config = {
+        autoCut: this.config.autoCut,
         type: 'serial',
         name: `USB Printer (vendor ${info.usbVendorId ?? 'unknown'})`,
         usbVendorId: info.usbVendorId,
@@ -206,6 +298,8 @@ class PrinterService {
         baudRate: DEFAULT_BAUD_RATE,
       };
       this.saveConfig();
+      this.manualDisconnect = false;
+      this.notify();
 
       return true;
     } catch (err) {
@@ -218,36 +312,49 @@ class PrinterService {
 
   // ── Reconnect ────────────────────────────────────────────────────
 
+  /**
+   * Restore the saved printer without showing a device picker.
+   * Safe to call repeatedly; concurrent calls share one attempt.
+   */
   async reconnect(): Promise<boolean> {
     if (!this.config.type) return false;
+    if (this.isConnected) return true;
+    if (this.reconnecting) return this.reconnecting;
 
-    if (this.config.type === 'bluetooth' && this.isWebBluetoothAvailable) {
-      return this.reconnectBluetooth();
+    this.reconnecting = (async () => {
+      if (this.config.type === 'bluetooth' && this.isWebBluetoothAvailable) {
+        return this.reconnectBluetooth();
+      }
+      if (this.config.type === 'serial' && this.isWebSerialAvailable) {
+        return this.reconnectSerial();
+      }
+      return false;
+    })();
+
+    try {
+      return await this.reconnecting;
+    } finally {
+      this.reconnecting = null;
+      this.notify();
     }
-
-    if (this.config.type === 'serial' && this.isWebSerialAvailable) {
-      return this.reconnectSerial();
-    }
-
-    return false;
   }
 
   private async reconnectBluetooth(): Promise<boolean> {
+    // Same session: reuse the device object we already have.
+    if (this.bluetoothDevice) {
+      return this.connectGatt(this.bluetoothDevice);
+    }
+
     if (!this.config.id) return false;
 
     try {
-      const devices = await navigator.bluetooth!.getDevices();
+      // getDevices() lists previously-permitted printers (needs a recent Chrome/Edge).
+      const devices = (await navigator.bluetooth!.getDevices?.()) ?? [];
       const device = devices.find((d: BluetoothDevice) => d.id === this.config.id);
-      if (!device?.gatt) return false;
+      if (!device) return false;
 
-      const server = await device.gatt.connect();
-      const characteristic = await this.findBluetoothWriteCharacteristic(server);
-
-      this.bluetoothDevice = device;
-      this.bluetoothCharacteristic = characteristic;
-
+      if (!(await this.connectGatt(device))) return false;
       this.registerBleDisconnectHandler(device);
-
       return true;
     } catch {
       return false;
@@ -257,27 +364,23 @@ class PrinterService {
   private async reconnectSerial(): Promise<boolean> {
     try {
       const ports = await navigator.serial!.getPorts();
-      const port = ports.find((p: SerialPort) => {
-        const info = p.getInfo();
-        if (
-          this.config.usbVendorId != null &&
-          info.usbVendorId === this.config.usbVendorId
-        ) {
-          return true;
-        }
-        if (
-          this.config.usbProductId != null &&
-          info.usbProductId === this.config.usbProductId
-        ) {
-          return true;
-        }
-        return false;
-      });
+      const { usbVendorId, usbProductId } = this.config;
+      const port =
+        // Prefer an exact vendor+product match, then vendor only, then the only permitted port.
+        ports.find((p) => {
+          const info = p.getInfo();
+          return info.usbVendorId === usbVendorId && info.usbProductId === usbProductId;
+        }) ??
+        ports.find((p) => usbVendorId != null && p.getInfo().usbVendorId === usbVendorId) ??
+        (ports.length === 1 ? ports[0] : undefined);
 
       if (!port) return false;
 
-      const baudRate = this.config.baudRate ?? DEFAULT_BAUD_RATE;
-      await port.open({ baudRate });
+      // The port may still be open from before (e.g. a failed write); reuse it.
+      if (!port.writable) {
+        const baudRate = this.config.baudRate ?? DEFAULT_BAUD_RATE;
+        await port.open({ baudRate });
+      }
 
       this.serialPort = port;
       return true;
@@ -290,6 +393,7 @@ class PrinterService {
 
   /** Explicit user-triggered disconnect — clears everything. */
   disconnect() {
+    this.manualDisconnect = true;
     if (this.bluetoothDevice?.gatt?.connected) {
       this.bluetoothDevice.gatt.disconnect();
     }
@@ -301,6 +405,7 @@ class PrinterService {
     this.serialPort = null;
     this.config = { type: null, name: '' };
     this.saveConfig();
+    this.notify();
   }
 
   // ── Data transmission ────────────────────────────────────────────
@@ -324,6 +429,7 @@ class PrinterService {
       const chunk = data.slice(i, i + DEFAULT_BLE_WRITE_CHUNK_SIZE);
       if (characteristic.properties.writeWithoutResponse) {
         await characteristic.writeValueWithoutResponse(chunk);
+        await sleep(BLE_CHUNK_DELAY_MS);
       } else {
         await characteristic.writeValueWithResponse(chunk);
       }
@@ -333,9 +439,17 @@ class PrinterService {
   private async printSerial(data: Uint8Array) {
     if (!this.serialPort?.writable) throw new Error('Printer not connected');
 
-    const writer = this.serialPort.writable.getWriter();
+    const port = this.serialPort;
+    const writer = port.writable!.getWriter();
     try {
       await writer.write(data);
+    } catch (err) {
+      // Port is broken (cable pulled, printer power-cycled). Close it so the
+      // next reconnect re-opens it cleanly instead of reusing a dead handle.
+      this.serialPort = null;
+      port.close().catch(() => {});
+      this.notify();
+      throw err;
     } finally {
       writer.releaseLock();
     }
@@ -344,29 +458,33 @@ class PrinterService {
   // ── Receipt printing ─────────────────────────────────────────────
 
   /**
-   * Print a receipt via the connected thermal printer, or fall back to
-   * browser print when no direct printer is configured.
+   * Print a receipt on the thermal printer, reconnecting first if the link dropped.
    *
-   * IMPORTANT: If a direct printer is connected but printing fails, we
-   * throw the error instead of falling back to browser print. This
-   * prevents duplicate receipts when the printer already received part
-   * or most of the data before the error occurred.
+   * IMPORTANT: on failure we throw rather than retry automatically, so the
+   * cashier sees the problem and we never print duplicate receipts when the
+   * printer already received part of the data.
    */
-  async printReceipt(data: ReceiptData) {
-    if (this.isConnected && this.config.type) {
-      try {
-        const escposData = encodeReceipt(data);
-        await this.print(escposData);
-        return;
-      } catch (err) {
-        console.error('Direct printer communication failed:', err);
-        throw new Error(
-          'Printer communication failed. Please check the printer before printing again.',
-        );
-      }
+  async printReceipt(
+    data: ReceiptData,
+    { copies = ['customer', 'accounts'], reprint = false }: { copies?: ReceiptCopy[]; reprint?: boolean } = {},
+  ) {
+    if (!this.config.type) {
+      throw new Error('No printer set up. Connect one via USB or Bluetooth first.');
     }
-
-    browserPrint(data);
+    if (!(await this.reconnect())) {
+      throw new Error(
+        `Can't reach ${this.config.name || 'the printer'}. Check it is switched on and the cable/Bluetooth is connected, then press Print again.`,
+      );
+    }
+    try {
+      // All copies go in one job so they come out back-to-back, each cut separately.
+      await this.print(encodeReceiptCopies(data, copies, { reprint, autoCut: this.autoCut }));
+    } catch (err) {
+      console.error('Direct printer communication failed:', err);
+      throw new Error(
+        'Printer communication failed. Please check the printer before printing again.',
+      );
+    }
   }
 }
 

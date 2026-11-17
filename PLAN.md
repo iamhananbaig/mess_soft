@@ -296,19 +296,16 @@ POST /api/v1/sales
         Thank you!
 ```
 
-### Two Modes
+### Printing
 
-**Mode 1: Browser Print (default)**
-- Format receipt as HTML div (80mm width, monospace font)
-- `window.print()` with print-specific CSS (`@media print`)
-- Works with any printer driver installed on the OS
+Receipts print only on a thermal printer using ESC/POS, sent from the browser over
+Web Serial (USB) or Web Bluetooth. Both require HTTPS (or localhost) and Chrome/Edge.
+The saved printer reconnects automatically (on POS load, on print, on USB re-plug,
+after a Bluetooth drop). There is no browser `window.print()` fallback.
 
-**Mode 2: ESC/POS (optional)**
-- Generate ESC/POS commands (initialize, text, cut, etc.)
-- Send via Web Serial API or USB endpoint
-- For dedicated POS terminals with thermal printers
-
-**Frontend:** `<Receipt />` component renders receipt data. `<PrintButton />` handles both modes with a toggle.
+**Frontend:** `services/printer.ts` (connection + send), `lib/escpos.ts` (encoder),
+`<PrintDialog />` (connect/print), `<PrinterStatus />` (POS status line).
+`<Receipt />` is only used for the on-screen reprint preview.
 
 ---
 

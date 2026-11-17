@@ -547,6 +547,7 @@ export function ReportsPage() {
         data={printDialogData}
         open={printDialogOpen}
         onOpenChange={setPrintDialogOpen}
+        reprint
       />
     </div>
   );

@@ -13,6 +13,7 @@ import { PageSpinner } from '@/components/PageSpinner';
 import { EmptyState } from '@/components/EmptyState';
 import type { ReceiptData } from '@/types/receipt';
 import { PrintDialog } from '@/components/PrintDialog';
+import { PrinterStatus } from '@/components/PrinterStatus';
 import { ShortcutsDialog } from '@/components/ShortcutsDialog';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -233,6 +234,7 @@ export function POSPage() {
             </div>
           )}
         </div>
+        <PrinterStatus />
         <Button
           className="w-full bg-accent hover:bg-accent/90 text-accent-foreground"
           size="lg"

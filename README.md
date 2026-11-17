@@ -105,7 +105,7 @@ mess_soft/
 - **Role-Based Access** — 5 roles (super-admin, admin, manager, cashier, employee) with granular permissions
 - **Category Management** — Create/edit/delete menu categories
 - **Reports** — Daily/weekly/monthly sales, low stock alerts, top selling items
-- **Receipt Printing** — Browser print + ESC/POS thermal printer support
+- **Receipt Printing** — ESC/POS thermal printer over USB or Bluetooth (auto-reconnect)
 
 ## API Overview
 

@@ -5,7 +5,7 @@ Fully built POS + inventory app. Two separate apps with custom code throughout:
 - `api/` — Laravel 13 backend: 9 models, 10 API controllers, full route tree, seeders
 - `frontend/` — React 19 SPA: 9 pages, 60+ shadcn/ui components, auth flow, lazy-loaded routes
 
-Key features: recipe-based stock consumption (burger = bun + patty), manual consumption tracking, expired items, sale reports, thermal receipt printing (browser + ESC/POS).
+Key features: recipe-based stock consumption (burger = bun + patty), manual consumption tracking, expired items, sale reports, thermal receipt printing (ESC/POS over USB/Bluetooth).
 
 ## Tech Stack
 - **Backend:** Laravel 13, PHP 8.3+, Sanctum 4, Spatie Permission 8
