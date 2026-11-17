@@ -22,22 +22,28 @@ export interface NavItem {
   icon: Icon;
   /** Shown in the phone bottom bar (most-used pages for counter staff). */
   mobileTab?: boolean;
+  /** Sidebar section. */
+  group: NavGroup;
 }
+
+export type NavGroup = 'Sell' | 'Insights' | 'Stock' | 'Admin';
+/** Sidebar section order. */
+export const NAV_GROUPS: NavGroup[] = ['Sell', 'Insights', 'Stock', 'Admin'];
 
 /** Single source of truth for pages: drives the sidebar, the phone tab bar and route guards. */
 export const NAV_ITEMS: NavItem[] = [
-  { path: '/dashboard', label: 'Dashboard', permission: ['reports:view'], icon: SquaresFour, mobileTab: true },
-  { path: '/', label: 'POS', permission: ['pos:use'], icon: ShoppingCart, mobileTab: true },
-  { path: '/voids', label: 'Voids', permission: ['sales:void-request', 'sales:void-approve'], icon: Prohibit, mobileTab: true },
-  { path: '/cash-closing', label: 'Cash Closing', permission: ['cash:close', 'reports:view'], icon: Vault, mobileTab: true },
-  { path: '/reports', label: 'Reports', permission: ['reports:view'], icon: ChartBar, mobileTab: true },
-  { path: '/menu', label: 'Menu', permission: ['menu:view'], icon: ForkKnife },
-  { path: '/inventory', label: 'Inventory', permission: ['inventory:view'], icon: Package },
-  { path: '/consumptions', label: 'Consumptions', permission: ['consumptions:view'], icon: UserMinus },
-  { path: '/receipt-design', label: 'Settings', permission: ['settings:manage'], icon: Receipt },
-  { path: '/employees', label: 'Employees', permission: ['employees:view'], icon: Users },
-  { path: '/permissions', label: 'Permissions', permission: ['employees:edit'], icon: Shield },
-  { path: '/activity', label: 'Activity Log', permission: ['activity:view'], icon: ClockCounterClockwise },
+  { path: '/dashboard', label: 'Dashboard', permission: ['reports:view'], icon: SquaresFour, mobileTab: true, group: 'Insights' },
+  { path: '/', label: 'POS', permission: ['pos:use'], icon: ShoppingCart, mobileTab: true, group: 'Sell' },
+  { path: '/voids', label: 'Voids', permission: ['sales:void-request', 'sales:void-approve'], icon: Prohibit, mobileTab: true, group: 'Sell' },
+  { path: '/cash-closing', label: 'Cash Closing', permission: ['cash:close', 'reports:view'], icon: Vault, mobileTab: true, group: 'Sell' },
+  { path: '/reports', label: 'Reports', permission: ['reports:view'], icon: ChartBar, mobileTab: true, group: 'Insights' },
+  { path: '/menu', label: 'Menu', permission: ['menu:view'], icon: ForkKnife, group: 'Stock' },
+  { path: '/inventory', label: 'Inventory', permission: ['inventory:view'], icon: Package, group: 'Stock' },
+  { path: '/consumptions', label: 'Consumptions', permission: ['consumptions:view'], icon: UserMinus, group: 'Stock' },
+  { path: '/receipt-design', label: 'Settings', permission: ['settings:manage'], icon: Receipt, group: 'Admin' },
+  { path: '/employees', label: 'Employees', permission: ['employees:view'], icon: Users, group: 'Admin' },
+  { path: '/permissions', label: 'Permissions', permission: ['employees:edit'], icon: Shield, group: 'Admin' },
+  { path: '/activity', label: 'Activity Log', permission: ['activity:view'], icon: ClockCounterClockwise, group: 'Admin' },
 ];
 
 export function canSee(item: NavItem, hasPermission: (p: string) => boolean): boolean {
