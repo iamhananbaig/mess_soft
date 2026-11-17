@@ -22,11 +22,18 @@ until php -r "
     sleep 3
 done
 
-echo "Running database migrations..."
-php artisan migrate --force
+# Only one container may migrate. The queue and scheduler containers share this
+# image and set RUN_MIGRATIONS=false; running migrations concurrently races
+# (MySQL DDL is not transactional) and can apply a migration twice.
+if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
+    echo "Running database migrations..."
+    php artisan migrate --force
 
-echo "Seeding roles and permissions..."
-php artisan db:seed --class=RolesAndPermissionSeeder --force || echo "WARNING: role/permission seeding failed"
+    echo "Seeding roles and permissions..."
+    php artisan db:seed --class=RolesAndPermissionSeeder --force || echo "WARNING: role/permission seeding failed"
+else
+    echo "Skipping migrations (RUN_MIGRATIONS=false)"
+fi
 
 echo "Caching configuration..."
 php artisan config:cache 2>/dev/null || true
