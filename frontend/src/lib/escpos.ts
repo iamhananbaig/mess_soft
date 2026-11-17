@@ -119,19 +119,6 @@ export function bold(on: boolean): Uint8Array {
   return bytes(0x1b, 0x45, on ? 1 : 0); // ESC E n
 }
 
-/** ESC - n — underline off, or on at 2 dots thick (the thickest available). */
-export function underline(on: boolean): Uint8Array {
-  return bytes(0x1b, 0x2d, on ? 2 : 0);
-}
-
-/**
- * A separator as a solid 2-dot line: a row of underlined spaces. `-`/`=` glyphs
- * are 1 dot thin and fade away on this printer; the underline does not.
- */
-export function ruleLine(columns: number): Uint8Array {
-  return concat(underline(true), text(' '.repeat(columns) + '\n'), underline(false));
-}
-
 export function doubleWidth(on: boolean): Uint8Array {
   return bytes(0x1d, 0x21, on ? 0x10 : 0x00); // GS ! n (double width)
 }
@@ -179,6 +166,10 @@ function twoColumns(left: string, right: string, width: number): string {
 
 function commas(n: number): string {
   return n.toLocaleString('en-US');
+}
+
+function line(char: string, width: number): string {
+  return char.repeat(width);
 }
 
 // ── Receipt settings ─────────────────────────────────────────────────
@@ -272,8 +263,7 @@ export function encodeReceipt(data: ReceiptData, options: EncodeReceiptOptions):
   const isCash = data.payment_method === 'Cash';
   const W = profile.columns;
   const SAFE_W = W - 3; // leave 3 chars (~27 dots) of right margin
-  // '-' and '=' print the same solid line; two in a row make a double rule.
-  const rule = (_char: '-' | '=') => ruleLine(W);
+  const rule = (char: string) => text(line(char, W) + '\n');
 
   parts.push(initialize());
   parts.push(selectFont(profile.font));
@@ -424,8 +414,7 @@ export function encodeCashClosing(
   const W = profile.columns;
   const SAFE_W = W - 3;
   const parts: Uint8Array[] = [];
-  // '-' and '=' print the same solid line; two in a row make a double rule.
-  const rule = (_char: '-' | '=') => ruleLine(W);
+  const rule = (char: string) => text(line(char, W) + '\n');
   const pair = (label: string, value: string) =>
     text(label + ' '.repeat(Math.max(1, SAFE_W - label.length - value.length)) + value + '\n');
 

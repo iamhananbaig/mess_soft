@@ -9,7 +9,6 @@ export interface PreviewRun {
   w: number;
   /** Character height multiplier (1–8). */
   h: number;
-  underline: boolean;
 }
 
 export type PreviewLine =
@@ -35,7 +34,6 @@ export function interpretEscPos(data: Uint8Array): SlipPreviewModel {
   let bold = false;
   let w = 1;
   let h = 1;
-  let ul = false;
   let runs: PreviewRun[] = [];
   let pending: number[] = [];
 
@@ -44,8 +42,8 @@ export function interpretEscPos(data: Uint8Array): SlipPreviewModel {
     const text = decoder.decode(new Uint8Array(pending));
     pending = [];
     const last = runs[runs.length - 1];
-    if (last && last.bold === bold && last.w === w && last.h === h && last.underline === ul) last.text += text;
-    else runs.push({ text, bold, w, h, underline: ul });
+    if (last && last.bold === bold && last.w === w && last.h === h) last.text += text;
+    else runs.push({ text, bold, w, h });
   };
   const endLine = () => {
     flushText();
@@ -59,8 +57,7 @@ export function interpretEscPos(data: Uint8Array): SlipPreviewModel {
     if (b === 0x1b) {
       const cmd = data[i + 1];
       flushText();
-      if (cmd === 0x40) { alignMode = 'left'; bold = false; ul = false; w = 1; h = 1; font = 'A'; i += 1; continue; } // ESC @
-      if (cmd === 0x2d) { ul = data[i + 2] === 1 || data[i + 2] === 2; i += 2; continue; } // ESC - n (underline)
+      if (cmd === 0x40) { alignMode = 'left'; bold = false; w = 1; h = 1; font = 'A'; i += 1; continue; } // ESC @
       if (cmd === 0x4d) { font = data[i + 2] === 1 ? 'B' : 'A'; i += 2; continue; } // ESC M n (font)
       if (cmd === 0x61) { const n = data[i + 2]; alignMode = n === 1 ? 'center' : n === 2 ? 'right' : 'left'; i += 2; continue; }
       if (cmd === 0x45) { bold = data[i + 2] === 1; i += 2; continue; } // ESC E n
