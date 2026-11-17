@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import api from '@/services/api';
-import { showToast } from '@/lib/toast';
+import { showToast, showErrorToast } from '@/lib/toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -66,8 +66,8 @@ export function InventoryPage() {
       else if (dialogType === 'expire' && selected) { await api.post(`/inventory/${selected.id}/expire`, { quantity: Number(form.quantity), note: form.note }); showToast('Stock expired', 'success'); }
       setDialogOpen(false);
       load();
-    } catch {
-      showToast('Failed to update inventory', 'error');
+    } catch (err) {
+      showErrorToast(err, 'Failed to update inventory');
     } finally {
       setSubmitLoading(false);
     }
@@ -174,12 +174,12 @@ export function InventoryPage() {
               <>
                 <FormField label="Name" required><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required /></FormField>
                 <FormField label="Unit" required><Input value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder="pcs, ml, g, kg" required /></FormField>
-                <FormField label="Initial Stock"><Input type="text" inputMode="numeric" pattern="[0-9]*" value={form.current_stock} onChange={(e) => setForm({ ...form, current_stock: e.target.value })} /></FormField>
+                <FormField label="Initial Stock"><Input type="text" inputMode="decimal" pattern="[0-9]*\.?[0-9]*" value={form.current_stock} onChange={(e) => setForm({ ...form, current_stock: e.target.value })} /></FormField>
               </>
             )}
             {dialogType !== 'create' && (
               <>
-                <FormField label="Quantity" required><Input type="text" inputMode="decimal" pattern="[0-9]*\.?[0-9]*" step="0.01" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} required /></FormField>
+                <FormField label={dialogType === 'adjust' ? 'Quantity (use - to reduce, e.g. -2)' : 'Quantity'} required><Input type="text" inputMode={dialogType === 'adjust' ? 'text' : 'decimal'} pattern={dialogType === 'adjust' ? '-?[0-9]*\\.?[0-9]+' : '[0-9]*\\.?[0-9]+'} value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} required /></FormField>
                 {dialogType === 'stockin' && <FormField label="Reference (PO/UR)"><Input value={form.reference} onChange={(e) => setForm({ ...form, reference: e.target.value })} /></FormField>}
                 <FormField label="Note"><Input value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></FormField>
               </>

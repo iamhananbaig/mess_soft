@@ -11,6 +11,7 @@ use App\Models\StockMovement;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 class SaleController extends Controller
 {
@@ -18,7 +19,10 @@ class SaleController extends Controller
     {
         $validated = $request->validate([
             'items' => 'required|array|min:1',
-            'items.*.menu_item_id' => 'required|exists:menu_items,id',
+            'items.*.menu_item_id' => [
+                'required',
+                Rule::exists('menu_items', 'id')->where('is_active', true),
+            ],
             'items.*.quantity' => 'required|integer|min:1',
             'amount_received' => 'required|integer|min:0',
         ]);
@@ -42,14 +46,20 @@ class SaleController extends Controller
                 ->get()
                 ->keyBy('id');
 
+            // Sum demand per ingredient across the whole cart, so two lines that
+            // share an ingredient (or a repeated line) can't oversell it.
+            $demand = [];
             foreach ($validated['items'] as $item) {
                 $menuItem = $menuItems[$item['menu_item_id']];
                 foreach ($menuItem->recipes as $recipe) {
-                    $needed = $recipe->quantity * $item['quantity'];
-                    $inventory = $inventoryItems[$recipe->inventory_item_id];
-                    if ($inventory->current_stock < $needed) {
-                        return response()->json(['message' => "Insufficient stock for {$inventory->name}"], 422);
-                    }
+                    $demand[$recipe->inventory_item_id] = ($demand[$recipe->inventory_item_id] ?? 0)
+                        + $recipe->quantity * $item['quantity'];
+                }
+            }
+            foreach ($demand as $inventoryId => $needed) {
+                $inventory = $inventoryItems[$inventoryId];
+                if ($inventory->current_stock < $needed) {
+                    return response()->json(['message' => "Insufficient stock for {$inventory->name}"], 422);
                 }
             }
 
@@ -124,7 +134,7 @@ class SaleController extends Controller
             $query->where('created_at', '>=', $validated['from']);
         }
         if ($validated['to'] ?? null) {
-            $query->where('created_at', '<=', $validated['to'] . ' 23:59:59');
+            $query->where('created_at', '<=', $validated['to'].' 23:59:59');
         }
         if ($validated['user_id'] ?? null) {
             $query->where('user_id', $validated['user_id']);
@@ -132,6 +142,7 @@ class SaleController extends Controller
 
         $perPage = min((int) ($validated['per_page'] ?? 20), 100);
         $sales = $query->paginate($perPage);
+
         return response()->json($sales);
     }
 
@@ -145,13 +156,13 @@ class SaleController extends Controller
         $sale->load(['items.menuItem', 'user']);
 
         return response()->json([
-            'canteen_name' => 'ISLAMABAD DIAGNOSTIC CENTRE PVT LTD',
-            'branch_name' => 'Main Branch',
+            'canteen_name' => config('app.receipt.canteen_name'),
+            'branch_name' => config('app.receipt.branch_name'),
             'date' => $sale->created_at->timezone('Asia/Karachi')->format('d-M-Y'),
             'time' => $sale->created_at->timezone('Asia/Karachi')->format('h:i A'),
             'receipt_number' => str_pad($sale->id, 6, '0', STR_PAD_LEFT),
             'cashier' => $sale->user->name,
-            'items' => $sale->items->map(fn($item) => [
+            'items' => $sale->items->map(fn ($item) => [
                 'name' => $item->menuItem->name,
                 'quantity' => $item->quantity,
                 'rate' => $item->unit_price,

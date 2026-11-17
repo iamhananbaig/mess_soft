@@ -26,7 +26,7 @@ echo "Running database migrations..."
 php artisan migrate --force
 
 echo "Seeding roles and permissions..."
-php artisan db:seed --class=RolesAndPermissionSeeder --force 2>/dev/null || true
+php artisan db:seed --class=RolesAndPermissionSeeder --force || echo "WARNING: role/permission seeding failed"
 
 echo "Caching configuration..."
 php artisan config:cache 2>/dev/null || true

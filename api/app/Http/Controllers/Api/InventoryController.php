@@ -14,12 +14,14 @@ class InventoryController extends Controller
     public function index(): JsonResponse
     {
         $items = InventoryItem::active()->orderBy('name')->get();
+
         return response()->json($items);
     }
 
     public function show(InventoryItem $inventory): JsonResponse
     {
         $inventory->load('stockMovements.user');
+
         return response()->json($inventory);
     }
 
@@ -33,6 +35,7 @@ class InventoryController extends Controller
         ]);
 
         $item = InventoryItem::create($validated);
+
         return response()->json($item, 201);
     }
 
@@ -46,6 +49,7 @@ class InventoryController extends Controller
         ]);
 
         $inventory->update($validated);
+
         return response()->json($inventory);
     }
 
@@ -79,7 +83,7 @@ class InventoryController extends Controller
     public function adjust(Request $request, InventoryItem $inventoryItem): JsonResponse
     {
         $validated = $request->validate([
-            'quantity' => 'required|integer',
+            'quantity' => 'required|numeric|not_in:0',
             'note' => 'nullable|string|max:255',
         ]);
 

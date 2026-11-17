@@ -24,14 +24,14 @@ class ReportController extends Controller
 
         $totalSales = (clone $sales)->sum('total_amount');
         $totalTransactions = (clone $sales)->count();
-        $itemsSold = SaleItem::whereHas('sale', fn($q) => $q->whereDate('created_at', $date))->sum('quantity');
+        $itemsSold = SaleItem::whereHas('sale', fn ($q) => $q->whereDate('created_at', $date))->sum('quantity');
 
         $items = SaleItem::select(
-                'menu_item_id',
-                DB::raw('SUM(quantity) as total_quantity'),
-                DB::raw('SUM(quantity * unit_price) as total_revenue')
-            )
-            ->whereHas('sale', fn($q) => $q->whereDate('created_at', $date))
+            'menu_item_id',
+            DB::raw('SUM(quantity) as total_quantity'),
+            DB::raw('SUM(quantity * unit_price) as total_revenue')
+        )
+            ->whereHas('sale', fn ($q) => $q->whereDate('created_at', $date))
             ->groupBy('menu_item_id')
             ->with('menuItem:id,name')
             ->orderByDesc('total_quantity')
@@ -84,7 +84,7 @@ class ReportController extends Controller
             ->whereBetween('created_at', [$from, $to->copy()->endOfDay()])
             ->with('inventoryItem:id,name,unit')
             ->get()
-            ->map(fn($m) => [
+            ->map(fn ($m) => [
                 'date' => $m->created_at->format('Y-m-d'),
                 'item' => $m->inventoryItem->name,
                 'unit' => $m->inventoryItem->unit,
@@ -95,7 +95,7 @@ class ReportController extends Controller
         $manual = ManualConsumption::whereBetween('created_at', [$from, $to->copy()->endOfDay()])
             ->with('inventoryItem:id,name,unit')
             ->get()
-            ->map(fn($c) => [
+            ->map(fn ($c) => [
                 'date' => $c->created_at->format('Y-m-d'),
                 'item' => $c->inventoryItem->name,
                 'unit' => $c->inventoryItem->unit,
@@ -113,16 +113,16 @@ class ReportController extends Controller
         $date = $request->date ? Carbon::parse($request->date) : Carbon::today();
 
         $sales = Sale::whereDate('created_at', $date)
-            ->with(['items' => fn($q) => $q->with('menuItem:id,name')])
+            ->with(['items' => fn ($q) => $q->with('menuItem:id,name')])
             ->orderBy('created_at')
             ->get();
 
-        $receipts = $sales->map(fn($sale) => [
+        $receipts = $sales->map(fn ($sale) => [
             'id' => $sale->id,
             'created_at' => $sale->created_at->toIso8601String(),
             'payment_method' => $sale->payment_method,
             'total_amount' => $sale->total_amount,
-            'items' => $sale->items->map(fn($item) => [
+            'items' => $sale->items->map(fn ($item) => [
                 'item' => $item->menuItem->name,
                 'price' => $item->unit_price,
                 'quantity' => $item->quantity,
@@ -153,10 +153,16 @@ class ReportController extends Controller
             ->get()
             ->groupBy('inventory_item_id');
 
-        $items = $items->map(function ($item) use ($allMovements) {
+        // Movements after the period end, used to roll current stock back to the period's closing.
+        $afterPeriod = StockMovement::where('created_at', '>', $to)
+            ->select('inventory_item_id', DB::raw('SUM(quantity) as total'))
+            ->groupBy('inventory_item_id')
+            ->pluck('total', 'inventory_item_id');
+
+        $items = $items->map(function ($item) use ($allMovements, $afterPeriod) {
             $movements = ($allMovements[$item->id] ?? collect())->pluck('total', 'source');
 
-            $closing = (float) $item->current_stock;
+            $closing = round((float) $item->current_stock - (float) ($afterPeriod[$item->id] ?? 0), 2);
             $netChange = $movements->sum();
             $opening = $closing - $netChange;
 
@@ -197,12 +203,16 @@ class ReportController extends Controller
             ->get();
 
         $netInPeriod = (float) $movements->sum('quantity');
-        $closing = (float) $item->current_stock;
+        $netAfterPeriod = (float) StockMovement::where('inventory_item_id', $item->id)
+            ->where('created_at', '>', $to)
+            ->sum('quantity');
+        $closing = round((float) $item->current_stock - $netAfterPeriod, 2);
         $opening = $closing - $netInPeriod;
 
         $balance = $opening;
         $movements = $movements->map(function ($m) use (&$balance) {
             $balance += (float) $m->quantity;
+
             return [
                 'id' => $m->id,
                 'date' => $m->created_at->timezone('Asia/Karachi')->format('Y-m-d h:i A'),

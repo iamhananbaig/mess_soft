@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '@/services/api';
-import { showToast } from '@/lib/toast';
+import { showToast, showErrorToast } from '@/lib/toast';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -98,8 +98,8 @@ export function PermissionsPage() {
       showToast(`Permissions updated for ${editingRole.name}`, 'success');
       setSheetOpen(false);
       load();
-    } catch {
-      showToast('Failed to update permissions', 'error');
+    } catch (err) {
+      showErrorToast(err, 'Failed to update permissions');
     } finally {
       setSaving(false);
     }

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import api from '@/services/api';
-import { showToast } from '@/lib/toast';
+import { showToast, showErrorToast } from '@/lib/toast';
 import { formatDate } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -54,8 +54,8 @@ export function ConsumptionPage() {
       setDialogOpen(false);
       setForm({ inventory_item_id: '', quantity: '', reason: '' });
       load();
-    } catch {
-      showToast('Failed to record consumption', 'error');
+    } catch (err) {
+      showErrorToast(err, 'Failed to record consumption');
     } finally {
       setSubmitLoading(false);
     }

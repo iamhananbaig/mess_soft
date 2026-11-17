@@ -16,7 +16,7 @@ import { PrintDialog } from '@/components/PrintDialog';
 import { ShortcutsDialog } from '@/components/ShortcutsDialog';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { showToast } from '@/lib/toast';
+import { showToast, showErrorToast } from '@/lib/toast';
 import { formatPKR } from '@/lib/format';
 import { FormField } from '@/components/FormField';
 import { ShoppingCart, Plus, Minus, X, Trash, MagnifyingGlass } from '@phosphor-icons/react';
@@ -105,8 +105,7 @@ export function POSPage() {
       setAmountReceived('');
       setCartOpen(false);
     } catch (err: unknown) {
-      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message || 'Sale failed';
-      showToast(message, 'error');
+      showErrorToast(err, 'Sale failed');
     } finally {
       setCheckoutLoading(false);
     }

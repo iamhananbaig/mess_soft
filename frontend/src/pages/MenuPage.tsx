@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import api from '@/services/api';
-import { showToast } from '@/lib/toast';
+import { showToast, showErrorToast } from '@/lib/toast';
 import { formatPKR } from '@/lib/format';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -128,8 +128,8 @@ export function MenuPage() {
         loadRecipes(res.data.id);
         load();
       }
-    } catch {
-      showToast('Failed to save menu item', 'error');
+    } catch (err) {
+      showErrorToast(err, 'Failed to save menu item');
     } finally {
       setSubmitLoading(false);
     }
@@ -143,8 +143,8 @@ export function MenuPage() {
       showToast('Menu item deactivated', 'success');
       setDeleteId(null);
       load();
-    } catch {
-      showToast('Failed to deactivate item', 'error');
+    } catch (err) {
+      showErrorToast(err, 'Failed to deactivate item');
     } finally {
       setSubmitLoading(false);
     }
@@ -163,8 +163,8 @@ export function MenuPage() {
       setRecipeForm({ inventory_item_id: '', quantity: '1' });
       setRecipeSearch('');
       loadRecipes(editing.id);
-    } catch {
-      showToast('Failed to add ingredient', 'error');
+    } catch (err) {
+      showErrorToast(err, 'Failed to add ingredient');
     } finally {
       setRecipeSubmitLoading(false);
     }
@@ -178,8 +178,8 @@ export function MenuPage() {
       showToast('Ingredient removed', 'success');
       setDeleteRecipeId(null);
       loadRecipes(editing.id);
-    } catch {
-      showToast('Failed to remove ingredient', 'error');
+    } catch (err) {
+      showErrorToast(err, 'Failed to remove ingredient');
     } finally {
       setRecipeSubmitLoading(false);
     }
@@ -204,8 +204,8 @@ export function MenuPage() {
       }
       setCategoryDialogOpen(false);
       load();
-    } catch {
-      showToast('Failed to save category', 'error');
+    } catch (err) {
+      showErrorToast(err, 'Failed to save category');
     } finally {
       setCategorySubmitLoading(false);
     }
@@ -219,8 +219,8 @@ export function MenuPage() {
       showToast('Category deleted', 'success');
       setDeleteCategoryId(null);
       load();
-    } catch {
-      showToast('Failed to delete category', 'error');
+    } catch (err) {
+      showErrorToast(err, 'Failed to delete category');
     } finally {
       setCategorySubmitLoading(false);
     }

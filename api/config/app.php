@@ -69,6 +69,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Receipt Header
+    |--------------------------------------------------------------------------
+    |
+    | Printed at the top of every receipt. Defaults match the original
+    | hard-coded values so existing deployments print identically.
+    |
+    */
+
+    'receipt' => [
+        'canteen_name' => env('RECEIPT_CANTEEN_NAME', 'ISLAMABAD DIAGNOSTIC CENTRE PVT LTD'),
+        'branch_name' => env('RECEIPT_BRANCH_NAME', 'Main Branch'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Locale Configuration
     |--------------------------------------------------------------------------
     |

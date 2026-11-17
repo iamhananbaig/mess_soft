@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import api from '@/services/api';
-import { showToast } from '@/lib/toast';
+import { useAuth } from '@/contexts/AuthContext';
+import { showToast, showErrorToast } from '@/lib/toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -20,6 +21,9 @@ interface Employee { id: number; name: string; email: string; is_active: boolean
 const ROLES = ['super-admin', 'admin', 'manager', 'cashier', 'employee'];
 
 export function EmployeesPage() {
+  const { user } = useAuth();
+  const isSuperAdmin = user?.roles.includes('super-admin') ?? false;
+  const assignableRoles = isSuperAdmin ? ROLES : ROLES.filter((r) => r !== 'super-admin');
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -50,14 +54,14 @@ export function EmployeesPage() {
     try {
       if (selected) {
         await api.put(`/employees/${selected.id}`, { name: form.name });
-        if (form.role) {
+        if (form.role && form.role !== selected.roles[0]?.name) {
           await api.post(`/employees/${selected.id}/role`, { role: form.role });
         }
       }
       setDialogOpen(false);
       load();
-    } catch {
-      showToast('Failed to update employee', 'error');
+    } catch (err) {
+      showErrorToast(err, 'Failed to update employee');
     } finally {
       setSubmitLoading(false);
     }
@@ -68,8 +72,8 @@ export function EmployeesPage() {
     try {
       await api.put(`/employees/${emp.id}`, { is_active: !emp.is_active });
       load();
-    } catch {
-      showToast('Failed to update employee', 'error');
+    } catch (err) {
+      showErrorToast(err, 'Failed to update employee');
     } finally {
       setSubmitLoading(false);
     }
@@ -127,7 +131,7 @@ export function EmployeesPage() {
               <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v ?? '' })}>
                 <SelectTrigger><SelectValue placeholder="Select role">{form.role || undefined}</SelectValue></SelectTrigger>
                 <SelectContent>
-                  {ROLES.map((r) => (<SelectItem key={r} value={r}>{r}</SelectItem>))}
+                  {assignableRoles.map((r) => (<SelectItem key={r} value={r}>{r}</SelectItem>))}
                 </SelectContent>
               </Select>
             </FormField>
