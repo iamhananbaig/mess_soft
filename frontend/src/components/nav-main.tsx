@@ -5,6 +5,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from '@/components/ui/sidebar';
 import type { ElementType } from 'react';
 
@@ -17,6 +18,7 @@ interface NavItem {
 export function NavMain({ items }: { items: NavItem[] }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const { setOpenMobile } = useSidebar();
 
   return (
     <SidebarGroup>
@@ -29,7 +31,7 @@ export function NavMain({ items }: { items: NavItem[] }) {
               <SidebarMenuButton
                 isActive={location.pathname === item.path}
                 tooltip={item.label}
-                onClick={() => navigate(item.path)}
+                onClick={() => { navigate(item.path); setOpenMobile(false); }}
               >
                 <Icon className="size-4" />
                 <span>{item.label}</span>

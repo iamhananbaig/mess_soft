@@ -24,42 +24,18 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
-import {
-  ShoppingCart,
-  ForkKnife,
-  Package,
-  ChartBar,
-  UserMinus,
-  Users,
-  Shield,
-  Prohibit,
-  Receipt,
-  Vault,
-} from '@phosphor-icons/react';
-
-const navItems: { path: string; label: string; permission: string | string[]; icon: typeof ShoppingCart }[] = [
-  { path: '/', label: 'POS', permission: 'pos:use', icon: ShoppingCart },
-  { path: '/menu', label: 'Menu', permission: 'menu:view', icon: ForkKnife },
-  { path: '/inventory', label: 'Inventory', permission: 'inventory:view', icon: Package },
-  { path: '/reports', label: 'Reports', permission: 'reports:view', icon: ChartBar },
-  { path: '/cash-closing', label: 'Cash Closing', permission: ['cash:close', 'reports:view'], icon: Vault },
-  { path: '/voids', label: 'Voids', permission: ['sales:void-request', 'sales:void-approve'], icon: Prohibit },
-  { path: '/consumptions', label: 'Consumptions', permission: 'consumptions:view', icon: UserMinus },
-  { path: '/receipt-design', label: 'Receipt Design', permission: 'settings:manage', icon: Receipt },
-  { path: '/employees', label: 'Employees', permission: 'employees:view', icon: Users },
-  { path: '/permissions', label: 'Permissions', permission: 'employees:edit', icon: Shield },
-];
+import { ShoppingCart } from '@phosphor-icons/react';
+import { NAV_ITEMS, canSee, navItemFor } from '@/lib/navigation';
+import { MobileTabBar } from '@/components/MobileTabBar';
 
 export function Layout() {
   const { user, logout, hasPermission } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
-  const filteredNav = navItems.filter((item) =>
-    (Array.isArray(item.permission) ? item.permission : [item.permission]).some(hasPermission),
-  );
+  const filteredNav = NAV_ITEMS.filter((item) => canSee(item, hasPermission));
 
-  const currentPage = navItems.find((item) => item.path === location.pathname);
+  const currentPage = navItemFor(location.pathname);
   const currentPageLabel = currentPage?.label ?? 'Page';
 
   const handleLogout = async () => {
@@ -94,8 +70,8 @@ export function Layout() {
         <SidebarRail />
       </Sidebar>
       <SidebarInset>
-        <header className="flex h-16 shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
-          <div className="flex items-center gap-2 px-4">
+        <header className="sticky top-0 z-30 flex h-12 md:h-16 shrink-0 items-center gap-2 border-b md:border-b-0 bg-background/95 backdrop-blur transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:md:h-12">
+          <div className="flex items-center gap-2 px-3 md:px-4">
             <SidebarTrigger size="icon-lg" className="-ml-1" />
             <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
             <Breadcrumb>
@@ -115,9 +91,11 @@ export function Layout() {
             </Breadcrumb>
           </div>
         </header>
-        <div className="flex-1 overflow-auto">
+        {/* Bottom padding on phones keeps content clear of the tab bar */}
+        <div className="flex-1 overflow-auto pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">
           <Outlet />
         </div>
+        <MobileTabBar />
       </SidebarInset>
     </SidebarProvider>
   );

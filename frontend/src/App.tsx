@@ -8,6 +8,7 @@ import { Toaster } from '@/components/ui/toast';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { PageSpinner } from '@/components/PageSpinner';
 import { LoginPage } from '@/pages/LoginPage';
+import { RequirePermission } from '@/components/RequirePermission';
 
 const POSPage = lazy(() => import('@/pages/POSPage').then((m) => ({ default: m.POSPage })));
 const MenuPage = lazy(() => import('@/pages/MenuPage').then((m) => ({ default: m.MenuPage })));
@@ -37,16 +38,16 @@ export default function App() {
                   </ProtectedRoute>
                 }
               >
-                <Route index element={<Suspense fallback={<PageSpinner />}><POSPage /></Suspense>} />
-                <Route path="menu" element={<Suspense fallback={<PageSpinner />}><MenuPage /></Suspense>} />
-                <Route path="inventory" element={<Suspense fallback={<PageSpinner />}><InventoryPage /></Suspense>} />
-                <Route path="reports" element={<Suspense fallback={<PageSpinner />}><ReportsPage /></Suspense>} />
-                <Route path="consumptions" element={<Suspense fallback={<PageSpinner />}><ConsumptionPage /></Suspense>} />
-                <Route path="voids" element={<Suspense fallback={<PageSpinner />}><VoidsPage /></Suspense>} />
-                <Route path="receipt-design" element={<Suspense fallback={<PageSpinner />}><ReceiptDesignPage /></Suspense>} />
-                <Route path="cash-closing" element={<Suspense fallback={<PageSpinner />}><CashClosingPage /></Suspense>} />
-                <Route path="employees" element={<Suspense fallback={<PageSpinner />}><EmployeesPage /></Suspense>} />
-                <Route path="permissions" element={<Suspense fallback={<PageSpinner />}><PermissionsPage /></Suspense>} />
+                <Route index element={<RequirePermission path="/"><Suspense fallback={<PageSpinner />}><POSPage /></Suspense></RequirePermission>} />
+                <Route path="menu" element={<RequirePermission path="/menu"><Suspense fallback={<PageSpinner />}><MenuPage /></Suspense></RequirePermission>} />
+                <Route path="inventory" element={<RequirePermission path="/inventory"><Suspense fallback={<PageSpinner />}><InventoryPage /></Suspense></RequirePermission>} />
+                <Route path="reports" element={<RequirePermission path="/reports"><Suspense fallback={<PageSpinner />}><ReportsPage /></Suspense></RequirePermission>} />
+                <Route path="consumptions" element={<RequirePermission path="/consumptions"><Suspense fallback={<PageSpinner />}><ConsumptionPage /></Suspense></RequirePermission>} />
+                <Route path="voids" element={<RequirePermission path="/voids"><Suspense fallback={<PageSpinner />}><VoidsPage /></Suspense></RequirePermission>} />
+                <Route path="receipt-design" element={<RequirePermission path="/receipt-design"><Suspense fallback={<PageSpinner />}><ReceiptDesignPage /></Suspense></RequirePermission>} />
+                <Route path="cash-closing" element={<RequirePermission path="/cash-closing"><Suspense fallback={<PageSpinner />}><CashClosingPage /></Suspense></RequirePermission>} />
+                <Route path="employees" element={<RequirePermission path="/employees"><Suspense fallback={<PageSpinner />}><EmployeesPage /></Suspense></RequirePermission>} />
+                <Route path="permissions" element={<RequirePermission path="/permissions"><Suspense fallback={<PageSpinner />}><PermissionsPage /></Suspense></RequirePermission>} />
                 <Route path="*" element={<Suspense fallback={<PageSpinner />}><NotFoundPage /></Suspense>} />
               </Route>
             </Routes>
