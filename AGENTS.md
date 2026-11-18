@@ -33,6 +33,7 @@ frontend/                    React 19 + Vite 8 + TS + Tailwind 4 + shadcn/ui (ba
   src/lib/escposPreview.ts   reads those bytes back for previews
   src/lib/exporters.ts       Excel / PDF export (lazy-loaded)
   src/services/printer.ts    USB (Web Serial) / Bluetooth (Web Bluetooth) printer, auto-reconnect
+android/                     Sunmi V2 cashier app (Kotlin, minSdk 24) — see android/README.md
 docker/                      nginx image (builds the SPA, proxies /api)
 deploy/backup.sh             nightly backup for the VM
 docker-compose.yml           api + nginx only; MySQL is native on the VM (socket mount)

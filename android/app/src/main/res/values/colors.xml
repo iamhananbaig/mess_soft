@@ -1,0 +1,13 @@
+<resources>
+    <color name="bg">#F4F4F5</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="text">#18181B</color>
+    <color name="muted">#71717A</color>
+    <color name="border">#E4E4E7</color>
+    <color name="primary">#15803D</color>
+    <color name="primary_dark">#166534</color>
+    <color name="primary_soft">#DCFCE7</color>
+    <color name="danger">#B91C1C</color>
+    <color name="warning">#B45309</color>
+    <color name="disabled">#D4D4D8</color>
+</resources>
