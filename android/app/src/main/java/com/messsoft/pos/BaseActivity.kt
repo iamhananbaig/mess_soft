@@ -167,6 +167,80 @@ abstract class BaseActivity : ComponentActivity() {
         dialog.show()
     }
 
+    // ── App updates ──
+
+    /**
+     * Asks GitHub for a newer release. Automatic checks ([manual] = false) run at most every
+     * 6 hours and stay silent unless there is an update; a manual check always reports back.
+     */
+    protected fun checkForUpdates(manual: Boolean) {
+        val now = System.currentTimeMillis()
+        if (!manual && now - session.lastUpdateCheck < 6 * 60 * 60 * 1000L) return
+        val progress = if (manual) AlertDialog.Builder(this).setMessage("Checking for updates…").setCancelable(false).show() else null
+        lifecycleScope.launch {
+            val installed = Updater.installedVersion(this@BaseActivity)
+            try {
+                val latest = Updater.latest()
+                session.lastUpdateCheck = now
+                progress?.dismiss()
+                if (latest != null && Updater.isNewer(latest.version, installed)) {
+                    offerUpdate(latest, installed)
+                } else if (manual) {
+                    showError("Up to date", "You have the latest version ($installed).")
+                }
+            } catch (e: Exception) {
+                progress?.dismiss()
+                if (manual) showError("Couldn't check for updates", "${e.message ?: "No connection"}\n\nInstalled version: $installed")
+            }
+        }
+    }
+
+    private fun offerUpdate(release: Updater.Release, installed: String) {
+        val box = dialogBox()
+        box.addView(TextView(this).apply {
+            text = "Update available: ${release.version}"
+            textSize = 20f
+            setTypeface(typeface, Typeface.BOLD)
+        })
+        box.addView(TextView(this).apply {
+            text = "Installed: $installed · Download: ${"%.1f".format(java.util.Locale.US, release.size / 1_048_576.0)} MB"
+            textSize = 14f
+            setTextColor(getColor(R.color.muted))
+            setPadding(0, dp(4), 0, dp(8))
+        })
+        if (release.notes.isNotEmpty()) {
+            box.addView(TextView(this).apply {
+                text = release.notes.take(1500)
+                textSize = 15f
+            })
+        }
+        val dialog = AlertDialog.Builder(this).setView(android.widget.ScrollView(this).apply { addView(box) }).create()
+        addDialogButton(box, dialog, "Update now", primary = true) { downloadAndInstall(release) }
+        addDialogButton(box, dialog, "Later", primary = false) {}
+        dialog.show()
+    }
+
+    private fun downloadAndInstall(release: Updater.Release) {
+        val progress = AlertDialog.Builder(this).setMessage("Downloading ${release.version}… 0%").setCancelable(false).show()
+        lifecycleScope.launch {
+            try {
+                val apk = Updater.download(this@BaseActivity, release) { percent ->
+                    progress.setMessage("Downloading ${release.version}… $percent%")
+                }
+                progress.dismiss()
+                Updater.install(this@BaseActivity, apk)
+            } catch (e: Exception) {
+                progress.dismiss()
+                AlertDialog.Builder(this@BaseActivity)
+                    .setTitle("Update failed")
+                    .setMessage(e.message ?: "Download failed")
+                    .setPositiveButton("Retry") { _, _ -> downloadAndInstall(release) }
+                    .setNegativeButton("Close", null)
+                    .show()
+            }
+        }
+    }
+
     // ── Session ──
 
     /** 401 → the token was revoked or expired: back to sign-in. */

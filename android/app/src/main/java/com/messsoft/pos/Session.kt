@@ -27,6 +27,11 @@ class Session(context: Context) {
         get() = prefs.getInt("last_sale_id", 0)
         set(value) = prefs.edit().putInt("last_sale_id", value).apply()
 
+    /** When the app last asked GitHub for an update (ms). */
+    var lastUpdateCheck: Long
+        get() = prefs.getLong("last_update_check", 0)
+        set(value) = prefs.edit().putLong("last_update_check", value).apply()
+
     val apiBase: String get() = server.trimEnd('/') + "/api/v1"
 
     fun can(permission: String) = permission in permissions

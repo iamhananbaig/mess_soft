@@ -1,0 +1,99 @@
+# Builds, signs and publishes the Sunmi V2 app when an android-vX.Y[.Z] tag is pushed:
+#
+#   git tag -a android-v1.2 -m "What changed, one line per item"
+#   git push origin android-v1.2
+#
+# The tag message becomes the release notes the app shows in its "Update available" dialog.
+# Needs two repository secrets (Settings → Secrets and variables → Actions):
+#   ANDROID_KEYSTORE_BASE64   base64 of ~/.android-keys/mess-pos.jks
+#   ANDROID_KEYSTORE_PASSWORD the store/key password from ~/.android-keys/mess-pos.properties
+name: Android release
+
+on:
+  push:
+    tags: ['android-v*']
+
+permissions:
+  contents: write # create the release
+
+concurrency:
+  group: android-release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the annotated tag's message is the release notes
+
+      - name: Version from tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#android-v}"
+          if ! [[ "$VERSION" =~ ^[0-9]{1,2}\.[0-9]{1,2}(\.[0-9]{1,2})?$ ]]; then
+            echo "::error::Tag must look like android-v1.2 or android-v1.2.3 (got $GITHUB_REF_NAME)"
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ] || [ -z "$KEYSTORE_PASSWORD" ]; then
+            echo "::error::Set the ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD secrets first"
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/mess-pos.jks"
+          printf 'storeFile=%s\nstorePassword=%s\nkeyAlias=mess-pos\nkeyPassword=%s\n' \
+            "$RUNNER_TEMP/mess-pos.jks" "$KEYSTORE_PASSWORD" "$KEYSTORE_PASSWORD" > "$RUNNER_TEMP/signing.properties"
+          echo "MESS_POS_SIGNING=$RUNNER_TEMP/signing.properties" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: ./gradlew assembleRelease -PappVersionName="$VERSION" --no-daemon
+
+      - name: Check signature
+        run: |
+          APK=app/build/outputs/apk/release/app-release.apk
+          test -f "$APK" || { echo "::error::No signed APK was produced"; exit 1; }
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --print-certs "$APK" | tee "$RUNNER_TEMP/cert.txt"
+          # Same key as the installed app, or devices can't update.
+          grep -q "813caad42044e232a2751c5b02ae5ce6891e060b67cdeb9e7d45eea3b740675e" "$RUNNER_TEMP/cert.txt" \
+            || { echo "::error::APK is not signed with the Mess POS release key"; exit 1; }
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p dist
+          APK="dist/mess-pos-$VERSION.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$APK"
+          SHA=$(sha256sum "$APK" | cut -d' ' -f1)
+          MESSAGE=$(git tag -l --format='%(contents)' "$GITHUB_REF_NAME")
+          {
+            echo "$MESSAGE"
+            echo
+            echo "---"
+            echo "Install on a Sunmi V2: open this page on the device and download the APK, or use"
+            echo "⋮ → Check for updates in the app."
+            echo
+            echo "SHA-256: \`$SHA\`"
+          } > "$RUNNER_TEMP/notes.md"
+          gh release create "$GITHUB_REF_NAME" "$APK" \
+            --title "Mess POS $VERSION (Sunmi V2)" \
+            --notes-file "$RUNNER_TEMP/notes.md" \
+            --verify-tag

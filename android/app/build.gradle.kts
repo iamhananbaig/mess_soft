@@ -11,6 +11,15 @@ val signingProps = Properties().apply {
     file(path).takeIf { it.exists() }?.inputStream()?.use { load(it) }
 }
 
+val appVersionName = (findProperty("appVersionName") as String?) ?: "1.1"
+
+/** 1.2.3 → 10203. Must only ever go up: Android refuses to install a lower versionCode. */
+fun versionCodeFor(name: String): Int {
+    val parts = name.split('.').map { it.toIntOrNull() ?: error("Version must be numbers like 1.2 or 1.2.3, got $name") }
+    require(parts.size in 2..3 && parts.all { it in 0..99 }) { "Version must be like 1.2 or 1.2.3 (each part 0-99), got $name" }
+    return parts[0] * 10000 + parts[1] * 100 + parts.getOrElse(2) { 0 }
+}
+
 android {
     namespace = "com.messsoft.pos"
     compileSdk = 37
@@ -19,8 +28,10 @@ android {
         applicationId = "com.messsoft.pos"
         minSdk = 24 // Sunmi V2 runs Android 7.1
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        // Release builds get the version from the git tag (android-v1.2 → -PappVersionName=1.2).
+        versionName = appVersionName
+        // -PappVersionCode only for testing the updater against an older release.
+        versionCode = (findProperty("appVersionCode") as String?)?.toInt() ?: versionCodeFor(appVersionName)
     }
 
     signingConfigs {

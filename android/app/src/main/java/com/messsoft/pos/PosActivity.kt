@@ -159,6 +159,7 @@ class PosActivity : BaseActivity() {
                 findViewById<TextView>(R.id.title).text = AppState.receiptSettings.canteenName.ifEmpty { getString(R.string.app_name) }
                 buildCategoryChips()
                 showMenu()
+                checkForUpdates(manual = false)
             } } catch (e: ApiException) {
                 if (handleAuth(e)) return@launch
                 showMenuMessage("${e.message}\n\nTap to try again.")
@@ -406,6 +407,7 @@ class PosActivity : BaseActivity() {
 
     private fun showMoreMenu(anchor: View) {
         val popup = PopupMenu(this, anchor)
+        val dashboard = if (session.can("reports:view")) popup.menu.add("Dashboard") else null
         val sales = popup.menu.add("Sales")
         sales.isEnabled = session.can("sales:view")
         val voids = if (session.can("sales:void-approve")) popup.menu.add("Void requests") else null
@@ -415,15 +417,18 @@ class PosActivity : BaseActivity() {
         reprint.isEnabled = session.lastSaleId > 0
         val refresh = popup.menu.add("Refresh menu")
         val test = popup.menu.add("Test print")
+        val update = popup.menu.add("Check for updates (v${Updater.installedVersion(this)})")
         val signOut = popup.menu.add("Sign out")
         popup.setOnMenuItemClickListener { item ->
             when (item) {
+                dashboard -> startActivity(Intent(this, DashboardActivity::class.java))
                 sales -> startActivity(Intent(this, SalesActivity::class.java))
                 voids -> startActivity(Intent(this, VoidsActivity::class.java))
                 manage -> startActivity(Intent(this, MenuAdminActivity::class.java))
                 reprint -> printAccountsThenAsk(session.lastSaleId, null, null, reprint = true)
                 refresh -> load()
                 test -> testPrint()
+                update -> checkForUpdates(manual = true)
                 signOut -> confirmSignOut()
             }
             true
