@@ -28,7 +28,7 @@ jobs:
       run:
         working-directory: android
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0 # the annotated tag's message is the release notes
 
@@ -41,12 +41,12 @@ jobs:
           fi
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v5
 
       - name: Signing key
         env:
@@ -83,7 +83,13 @@ jobs:
           APK="dist/mess-pos-$VERSION.apk"
           cp app/build/outputs/apk/release/app-release.apk "$APK"
           SHA=$(sha256sum "$APK" | cut -d' ' -f1)
-          MESSAGE=$(git tag -l --format='%(contents)' "$GITHUB_REF_NAME")
+          # checkout replaces the annotated tag with a lightweight one; fetch the real tag object.
+          git fetch --force origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
+          if [ "$(git cat-file -t "$GITHUB_REF_NAME")" = "tag" ]; then
+            MESSAGE=$(git tag -l --format='%(contents)' "$GITHUB_REF_NAME" | sed '/^-----BEGIN PGP SIGNATURE-----/,$d')
+          else
+            MESSAGE="Version $VERSION"   # lightweight tag: no message to use
+          fi
           {
             echo "$MESSAGE"
             echo
