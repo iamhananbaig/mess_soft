@@ -39,7 +39,7 @@ only ever goes up), checks the APK is signed with the Mess POS key, and attaches
 GitHub Release.
 
 The app updates itself from those releases (`Updater.kt`): it checks on startup (at most
-every 6 hours) and from ⋮ → Check for updates, downloads the APK, verifies its size and
+every 6 hours) and from ☰ → Check for updates, downloads the APK, verifies its size and
 SHA-256, and opens Android's installer. On Android 8+ the first update asks once to allow
 Mess POS to install apps; on the V2 (Android 7) "Unknown sources" must be on.
 

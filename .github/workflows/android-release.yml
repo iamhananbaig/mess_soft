@@ -95,7 +95,7 @@ jobs:
             echo
             echo "---"
             echo "Install on a Sunmi V2: open this page on the device and download the APK, or use"
-            echo "⋮ → Check for updates in the app."
+            echo "☰ → Check for updates in the app."
             echo
             echo "SHA-256: \`$SHA\`"
           } > "$RUNNER_TEMP/notes.md"
