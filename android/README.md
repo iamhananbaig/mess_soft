@@ -67,8 +67,10 @@ Then sign in with server address `http://localhost:8000`. Plain HTTP is allowed 
 | File | What |
 |---|---|
 | `LoginActivity.kt` | Sign-in + server address; requires `sales:create` |
-| `BaseActivity.kt` | Shared session handling and the receipt print flow |
-| `PosActivity.kt` | Menu grid, cart, checkout, ⋮ menu |
+| `BaseActivity.kt` | `ScreenActivity` (edge-to-edge insets, top bar, dialogs) and `BaseActivity` (session, receipt copies, void review, updates) |
+| `Ui.kt` | Design-system helpers: `Fonts`, `Sheet` (bottom sheet / pop-up), `StateView` (loading, empty, error), status pills, menu rows |
+| `PosActivity.kt` | Menu grid with search, order ticket, checkout sheet, sale-complete screen, ☰ More sheet |
+| `TicketView.kt` | The dark order ticket with a torn top edge at the bottom of the POS screen |
 | `DashboardActivity.kt` / `BarChartView.kt` | Dashboard (GET /dashboard) and its bar chart |
 | `VoidsActivity.kt` | Pending void requests (approve / reject) |
 | `MenuAdminActivity.kt` | Add / edit menu items and categories |
@@ -77,3 +79,18 @@ Then sign in with server address `http://localhost:8000`. Plain HTTP is allowed 
 | `Api.kt` / `Session.kt` | JSON client with bearer token; saved session |
 | `EscPos.kt` | Receipt + test page encoder (58mm, 384 dots) |
 | `SunmiPrinter.kt` | Built-in printer via `com.sunmi:printerlibrary` |
+
+## Look and feel
+
+Colours match the web app (blue-700 primary, emerald for money in hand, cool greys);
+they live in `res/values/colors.xml`. Layout rules: menu tiles are the only cards on the
+POS screen, the order ticket is the one bold element, status is always a word on a tinted
+pill (never colour alone), and touch targets are at least 44dp.
+
+- **Font:** Plus Jakarta Sans (SIL Open Font License 1.1), the web app's font, in
+  `res/font/` as Regular / SemiBold / ExtraBold, subset to Latin (~37 KB each). XML fonts
+  need Android 8, so `Fonts.kt` applies them at runtime: bold → SemiBold, bold at 22sp
+  and up → ExtraBold. Amounts use tabular figures (`fontFeatureSettings="tnum"`).
+- **Icons:** Material Symbols Rounded (Apache 2.0), converted to vector drawables
+  (`res/drawable/ic_*.xml`) and tinted in code or XML.
+

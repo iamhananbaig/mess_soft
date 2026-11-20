@@ -1,12 +1,12 @@
 package com.messsoft.pos
 
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.graphics.Typeface
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.lifecycle.lifecycleScope
@@ -23,20 +23,17 @@ import kotlin.math.roundToInt
 class DashboardActivity : BaseActivity() {
 
     private lateinit var content: LinearLayout
-    private lateinit var message: TextView
-    private lateinit var summary: TextView
+    private lateinit var state: StateView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (!requireSession()) return
         if (!session.can("reports:view")) { finish(); return }
         setContentView(R.layout.activity_dashboard)
+        topBar("Dashboard")
+        addTopAction(R.drawable.ic_refresh, "Refresh") { load() }
         content = findViewById(R.id.content)
-        message = findViewById(R.id.message)
-        summary = findViewById(R.id.summary)
-        findViewById<Button>(R.id.back).setOnClickListener { finish() }
-        findViewById<Button>(R.id.refresh).setOnClickListener { load() }
-        message.setOnClickListener { load() }
+        state = StateView(window.decorView)
         load()
     }
 
@@ -46,20 +43,18 @@ class DashboardActivity : BaseActivity() {
     }
 
     private fun load() {
-        if (content.childCount == 0) {
-            message.text = "Loading…"
-            message.visibility = View.VISIBLE
-        }
+        if (content.childCount == 0) state.loading("Loading today's numbers…") else busy(true)
         lifecycleScope.launch {
             try {
                 val d = api.get("/dashboard") as JSONObject
                 render(d)
-                message.visibility = View.GONE
-                summary.text = "Updated ${SimpleDateFormat("hh:mm a", Locale.US).apply { timeZone = Time.KARACHI }.format(Date())}"
+                busy(false)
+                state.hide()
+                topSummary("Updated ${SimpleDateFormat("h:mm a", Locale.US).apply { timeZone = Time.KARACHI }.format(Date())}")
             } catch (e: ApiException) {
+                busy(false)
                 if (handleAuth(e)) return@launch
-                message.text = "${e.message}\n\nTap to try again."
-                message.visibility = View.VISIBLE
+                if (content.childCount == 0) state.error(e) { load() } else toast(e.message ?: "Couldn't refresh")
             }
         }
     }
@@ -173,14 +168,14 @@ class DashboardActivity : BaseActivity() {
         } else {
             for (i in low) {
                 addView(alertRow(Status.SERIOUS, i.optString("name"),
-                    "${qty(i.optDouble("current_stock"))} ${i.optString("unit")} left · reorder at ${qty(i.optDouble("reorder_level"))}", tag = "LOW"))
+                    "${qty(i.optDouble("current_stock"))} ${i.optString("unit")} left · reorder at ${qty(i.optDouble("reorder_level"))}", tag = "Low"))
             }
         }
         for (i in expiring) {
             val expired = i.optBoolean("expired")
             addView(alertRow(if (expired) Status.CRITICAL else Status.WARNING, i.optString("name"),
                 "${qty(i.optDouble("current_stock"))} ${i.optString("unit")} · ${if (expired) "expired" else "expires"} ${dayLabel(i.optString("expiry_date"))}",
-                tag = if (expired) "EXPIRED" else "EXPIRING"))
+                tag = if (expired) "Expired" else "Expiring"))
         }
         addView(TextView(context).apply {
             text = "Stock value: ${rs(a.optDouble("stock_value", 0.0).roundToInt())}"
@@ -190,11 +185,11 @@ class DashboardActivity : BaseActivity() {
         })
     }
 
-    private enum class Status(val color: Int, val label: String) {
-        GOOD(R.color.primary_dark, "OK"),
-        WARNING(R.color.warning, "CHECK"),
-        SERIOUS(R.color.warning, "LOW"),
-        CRITICAL(R.color.danger, "ALERT"),
+    private enum class Status(val color: Int, val soft: Int, val label: String) {
+        GOOD(R.color.success, R.color.success_soft, "OK"),
+        WARNING(R.color.warning, R.color.warning_soft, "Check"),
+        SERIOUS(R.color.warning, R.color.warning_soft, "Low"),
+        CRITICAL(R.color.danger, R.color.danger_soft, "Alert"),
     }
 
     /** Status shown as a coloured word, never colour alone. */
@@ -202,13 +197,10 @@ class DashboardActivity : BaseActivity() {
         LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, dp(8), 0, dp(8))
-            addView(TextView(context).apply {
-                text = tag ?: status.label
-                textSize = 11f
-                setTypeface(typeface, Typeface.BOLD)
-                setTextColor(getColor(status.color))
-                minWidth = dp(64)
+            setPadding(0, dp(9), 0, dp(9))
+            addView(LinearLayout(context).apply {
+                minimumWidth = dp(76)
+                addView(statusPill(tag ?: status.label, status.color, status.soft))
             })
             addView(LinearLayout(context).apply {
                 orientation = LinearLayout.VERTICAL
@@ -216,8 +208,16 @@ class DashboardActivity : BaseActivity() {
                 addView(TextView(context).apply { text = detail; textSize = 13f; setTextColor(getColor(R.color.muted)) })
             }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             if (onClick != null) {
-                addView(TextView(context).apply { text = "Review ›"; textSize = 14f; setTextColor(getColor(R.color.primary_dark)) })
-                setBackgroundResource(android.R.drawable.list_selector_background)
+                addView(TextView(context).apply {
+                    text = "Review"
+                    textSize = 15f
+                    setTypeface(typeface, Typeface.BOLD)
+                    setTextColor(getColor(R.color.primary))
+                    setCompoundDrawablesRelativeWithIntrinsicBounds(0, 0, R.drawable.ic_chevron_right, 0)
+                    compoundDrawableTintList = ColorStateList.valueOf(getColor(R.color.primary))
+                    gravity = Gravity.CENTER_VERTICAL
+                })
+                setBackgroundResource(R.drawable.ripple_row)
                 setOnClickListener { onClick() }
             }
         }
@@ -227,11 +227,11 @@ class DashboardActivity : BaseActivity() {
     private fun card(title: String) = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         setBackgroundResource(R.drawable.card)
-        setPadding(dp(14), dp(12), dp(14), dp(12))
+        setPadding(dp(16), dp(14), dp(16), dp(14))
         layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(10) }
         addView(TextView(context).apply {
             text = title
-            textSize = 16f
+            textSize = 17f
             setTypeface(typeface, Typeface.BOLD)
             setPadding(0, 0, 0, dp(6))
         })
@@ -247,9 +247,16 @@ class DashboardActivity : BaseActivity() {
     private fun tile(label: String, value: String, sub: String) = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         setBackgroundResource(R.drawable.card)
-        setPadding(dp(12), dp(10), dp(12), dp(10))
-        addView(TextView(context).apply { text = label; textSize = 13f; setTextColor(getColor(R.color.muted)) })
-        addView(TextView(context).apply { text = value; textSize = 22f; setTypeface(typeface, Typeface.BOLD) })
+        setPadding(dp(14), dp(12), dp(14), dp(12))
+        addView(TextView(context).apply { text = label; textSize = 13f; setTypeface(typeface, Typeface.BOLD); setTextColor(getColor(R.color.muted)) })
+        addView(TextView(context).apply {
+            text = value
+            textSize = 22f
+            setTypeface(typeface, Typeface.BOLD)
+            fontFeatureSettings = "tnum"
+            isSingleLine = true
+            setPadding(0, dp(2), 0, dp(2))
+        })
         addView(TextView(context).apply { text = sub; textSize = 12f; setTextColor(getColor(R.color.muted)) })
     }
 
@@ -287,7 +294,7 @@ class DashboardActivity : BaseActivity() {
             orientation = LinearLayout.HORIZONTAL
             addView(TextView(context).apply { text = label; textSize = 15f }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             addView(TextView(context).apply { text = detail; textSize = 13f; setTextColor(getColor(R.color.muted)); setPadding(dp(8), 0, dp(10), 0) })
-            addView(TextView(context).apply { text = amount; textSize = 15f; setTypeface(typeface, Typeface.BOLD) })
+            addView(TextView(context).apply { text = amount; textSize = 15f; setTypeface(typeface, Typeface.BOLD); fontFeatureSettings = "tnum" })
         })
         addView(LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL

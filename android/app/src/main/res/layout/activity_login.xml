@@ -2,34 +2,54 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="@color/surface"
     android:fillViewport="true">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="center_vertical"
         android:orientation="vertical"
-        android:padding="24dp">
+        android:paddingStart="24dp"
+        android:paddingTop="40dp"
+        android:paddingEnd="24dp"
+        android:paddingBottom="20dp">
+
+        <FrameLayout
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:background="@drawable/qty_badge"
+            android:backgroundTint="@color/primary">
+            <ImageView
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_launcher_fg"
+                android:importantForAccessibility="no" />
+        </FrameLayout>
 
         <TextView
+            android:id="@+id/heading"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
             android:text="@string/app_name"
-            android:textSize="28sp"
+            android:textSize="30sp"
             android:textStyle="bold" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="12dp"
-            android:text="Sign in to start selling"
+            android:layout_marginTop="4dp"
+            android:text="Sign in to start selling."
             android:textColor="@color/muted"
             android:textSize="16sp" />
 
-        <TextView style="@style/Label" android:text="Email" />
+        <TextView style="@style/Label" android:layout_marginTop="28dp" android:text="Email" />
         <EditText
             android:id="@+id/email"
             style="@style/Field"
+            android:hint="you@example.com"
+            android:imeOptions="actionNext"
             android:importantForAutofill="no"
             android:inputType="textEmailAddress" />
 
@@ -41,28 +61,91 @@
             android:importantForAutofill="no"
             android:inputType="textPassword" />
 
-        <TextView style="@style/Label" android:text="Server address" />
-        <EditText
-            android:id="@+id/server"
-            style="@style/Field"
-            android:hint="https://your-canteen-site"
-            android:importantForAutofill="no"
-            android:inputType="textUri"
-            android:textSize="15sp" />
+        <!-- Server: one line once it's set, a field when it isn't (or when changing it). -->
+        <LinearLayout
+            android:id="@+id/serverRow"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+            <TextView
+                android:id="@+id/serverText"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="middle"
+                android:singleLine="true"
+                android:textColor="@color/muted"
+                android:textSize="14sp" />
+            <Button
+                android:id="@+id/changeServer"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:background="@drawable/ripple_row"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:stateListAnimator="@null"
+                android:text="Change"
+                android:textAllCaps="false"
+                android:textColor="@color/primary"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/serverBox"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+            <TextView style="@style/Label" android:text="Server address" />
+            <EditText
+                android:id="@+id/server"
+                style="@style/Field"
+                android:hint="https://your-canteen-site"
+                android:importantForAutofill="no"
+                android:inputType="textUri"
+                android:textSize="15sp" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="The address you open the web app at."
+                android:textColor="@color/muted"
+                android:textSize="13sp" />
+        </LinearLayout>
 
         <TextView
             android:id="@+id/error"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/status_pill"
+            android:backgroundTint="@color/danger_soft"
+            android:padding="12dp"
             android:textColor="@color/danger"
             android:textSize="15sp"
             android:visibility="gone" />
 
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:minHeight="24dp" />
+
         <Button
             android:id="@+id/signIn"
             style="@style/PrimaryButton"
-            android:layout_marginTop="20dp"
             android:text="Sign in" />
+
+        <TextView
+            android:id="@+id/version"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="14dp"
+            android:textColor="@color/muted"
+            android:textSize="13sp" />
     </LinearLayout>
 </ScrollView>

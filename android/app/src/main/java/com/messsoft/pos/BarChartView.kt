@@ -35,6 +35,8 @@ class BarChartView(context: Context) : View(context) {
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = context.getColor(R.color.muted)
         textSize = dp(11f)
+        typeface = androidx.core.content.res.ResourcesCompat.getFont(context, R.font.jakarta_regular)
+        fontFeatureSettings = "tnum"
     }
     private val path = Path()
     private val rect = RectF()
@@ -64,7 +66,8 @@ class BarChartView(context: Context) : View(context) {
 
     override fun onDraw(canvas: Canvas) {
         if (values.isEmpty()) return
-        val maxValue = values.maxOrNull()?.takeIf { it > 0f } ?: 1f
+        val realMax = values.maxOrNull() ?: 0f
+        val maxValue = realMax.takeIf { it > 0f } ?: 1f
         val plotH = plotBottom - plotTop
         val slot = (width - left * 2) / values.size
         val gap = dp(2f)
@@ -74,7 +77,8 @@ class BarChartView(context: Context) : View(context) {
         // Top gridline with its value, then the baseline.
         canvas.drawLine(left, plotTop, width - left, plotTop, gridPaint.apply { alpha = 110 })
         textPaint.textAlign = Paint.Align.LEFT
-        canvas.drawText(topLabel(maxValue), left, plotTop - dp(5f), textPaint)
+        // An empty chart has no scale worth labelling.
+        if (realMax > 0f) canvas.drawText(topLabel(maxValue), left, plotTop - dp(5f), textPaint)
         gridPaint.alpha = 255
         canvas.drawLine(left, plotBottom, width - left, plotBottom, gridPaint)
 

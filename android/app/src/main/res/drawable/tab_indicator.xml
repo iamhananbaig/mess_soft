@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Category tab: a 3dp primary bar under the selected one. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_selected="true">
+        <layer-list>
+            <item android:gravity="bottom" android:height="3dp" android:left="12dp" android:right="12dp">
+                <shape><solid android:color="@color/primary" /><corners android:topLeftRadius="3dp" android:topRightRadius="3dp" /></shape>
+            </item>
+        </layer-list>
+    </item>
+    <item><color android:color="@android:color/transparent" /></item>
+</selector>

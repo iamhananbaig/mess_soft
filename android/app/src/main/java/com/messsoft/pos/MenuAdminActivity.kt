@@ -1,23 +1,17 @@
 package com.messsoft.pos
 
-import android.app.AlertDialog
-import android.graphics.Typeface
+import android.content.res.ColorStateList
 import android.os.Bundle
-import android.text.InputFilter
 import android.text.InputType
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.CheckBox
-import android.widget.EditText
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
-import android.widget.ScrollView
-import android.widget.Spinner
 import android.widget.TextView
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.DividerItemDecoration
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.async
@@ -55,48 +49,48 @@ class MenuAdminActivity : BaseActivity() {
     private val canCreateCategory by lazy { session.can("categories:create") }
     private val canEditCategory by lazy { session.can("categories:edit") }
 
-    private lateinit var summary: TextView
-    private lateinit var message: TextView
+    private lateinit var state: StateView
     private lateinit var filters: LinearLayout
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (!requireSession()) return
         setContentView(R.layout.activity_list)
-        findViewById<TextView>(R.id.title).text = "Manage menu"
-        summary = findViewById(R.id.summary)
-        message = findViewById(R.id.message)
+        topBar("Menu")
+        state = StateView(window.decorView)
         filters = findViewById(R.id.filters)
-        findViewById<Button>(R.id.back).setOnClickListener { finish() }
-        message.setOnClickListener { load() }
-
-        findViewById<Button>(R.id.action).apply {
-            if (canCreateCategory) {
-                text = "+ Category"
+        if (canCreateCategory) {
+            findViewById<LinearLayout>(R.id.actions).addView(Button(this).apply {
+                text = "New category"
+                textSize = 15f
+                isAllCaps = false
+                stateListAnimator = null
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+                setTextColor(getColor(R.color.primary))
+                setBackgroundResource(R.drawable.ripple_row)
+                setPadding(dp(12), 0, dp(12), 0)
                 setOnClickListener { editCategory(null) }
-            } else {
-                setOnClickListener { load() }
-            }
+            }, lp(ViewGroup.LayoutParams.WRAP_CONTENT, dp(44)))
+        } else {
+            addTopAction(R.drawable.ic_refresh, "Refresh") { load() }
         }
         if (canCreateItem) {
             findViewById<View>(R.id.bottomBar).visibility = View.VISIBLE
             findViewById<Button>(R.id.bottomButton).apply {
-                text = "+ Add menu item"
+                text = "Add a menu item"
                 setOnClickListener { editItem(null) }
             }
         }
         findViewById<RecyclerView>(R.id.list).apply {
             layoutManager = LinearLayoutManager(this@MenuAdminActivity)
             adapter = this@MenuAdminActivity.adapter
-            addItemDecoration(DividerItemDecoration(this@MenuAdminActivity, DividerItemDecoration.VERTICAL))
             itemAnimator = null
         }
         load()
     }
 
     private fun load() {
-        message.text = "Loading…"
-        message.visibility = View.VISIBLE
+        if (items.isEmpty()) state.loading("Loading the menu…") else busy(true)
         lifecycleScope.launch {
             try { coroutineScope {
                 val cats = async { if (session.can("categories:view")) runCatching { api.get("/categories") as JSONArray }.getOrNull() else null }
@@ -110,10 +104,12 @@ class MenuAdminActivity : BaseActivity() {
                 categories = (cats.await()?.objects()?.map { Category(it.optInt("id"), it.optString("name")) }
                     ?: rows.mapNotNull { r -> r.optJSONObject("category")?.let { Category(it.optInt("id"), it.optString("name")) } }.distinctBy { it.id })
                     .sortedBy { it.name.lowercase() }
+                busy(false)
                 show()
             } } catch (e: ApiException) {
+                busy(false)
                 if (handleAuth(e)) return@launch
-                message.text = "${e.message}\n\nTap to try again."
+                if (items.isEmpty()) state.error(e) { load() } else showError("Couldn't refresh", e.message)
             }
         }
     }
@@ -128,14 +124,32 @@ class MenuAdminActivity : BaseActivity() {
                 if (canEditCategory) setOnLongClickListener { editCategory(c); true }
             })
         }
+        val current = categories.firstOrNull { it.id == selected }
+        if (current != null && canEditCategory) {
+            filters.addView(TextView(this).apply {
+                text = "Rename"
+                textSize = 15f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+                setTextColor(getColor(R.color.primary))
+                setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_edit, 0, 0, 0)
+                compoundDrawableTintList = ColorStateList.valueOf(getColor(R.color.primary))
+                compoundDrawablePadding = dp(6)
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                minHeight = dp(38)
+                setPadding(dp(10), 0, dp(10), 0)
+                setBackgroundResource(R.drawable.ripple_row)
+                setOnClickListener { editCategory(current) }
+            })
+        }
         val visible = if (selected == 0) items else items.filter { it.categoryId == selected }
         adapter.submit(visible)
-        summary.text = "${visible.size} item${if (visible.size == 1) "" else "s"}" + if (canEditCategory) " · long-press a category to rename" else ""
+        val count = "${visible.size} item${if (visible.size == 1) "" else "s"}"
+        topSummary(if (current == null) "$count on the menu" else "$count in ${current.name}")
         if (visible.isEmpty()) {
-            message.text = if (canCreateItem) "No items here yet.\n\nTap “+ Add menu item” below." else "No items here."
-            message.visibility = View.VISIBLE
+            state.empty(R.drawable.ic_restaurant_menu, "No items here yet",
+                if (canCreateItem) "Add one with the button below." else null)
         } else {
-            message.visibility = View.GONE
+            state.hide()
         }
     }
 
@@ -147,13 +161,12 @@ class MenuAdminActivity : BaseActivity() {
     // ── Categories ──
 
     private fun editCategory(category: Category?) {
-        val box = dialogBox()
-        box.addView(heading(if (category == null) "New category" else "Rename category"))
-        val name = field("Category name", InputType.TYPE_TEXT_FLAG_CAP_WORDS, 255).apply { setText(category?.name.orEmpty()) }
-        box.addView(name)
-        val dialog = AlertDialog.Builder(this).setView(box).create()
-        val save = addDialogButton(box, dialog, if (category == null) "Add category" else "Save", primary = true) {}
-        addDialogButton(box, dialog, "Cancel", primary = false) { hideKeyboard() }
+        val sheet = Sheet(this).title(if (category == null) "New category" else "Rename “${category.name}”")
+        sheet.body.addView(label("Name"))
+        val name = field("e.g. Drinks", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS).apply { setText(category?.name.orEmpty()) }
+        sheet.body.addView(name)
+        val save = sheet.button(if (category == null) "Add category" else "Save name", keepOpen = true)
+        sheet.button("Cancel", ButtonKind.SECONDARY) { hideKeyboard() }
         save.setOnClickListener {
             val value = name.text.toString().trim()
             if (value.isEmpty()) { name.error = "Enter a name"; return@setOnClickListener }
@@ -170,7 +183,7 @@ class MenuAdminActivity : BaseActivity() {
                         toast("Category renamed")
                     }
                     hideKeyboard()
-                    dialog.dismiss()
+                    sheet.dismiss()
                     changed()
                 } catch (e: ApiException) {
                     if (handleAuth(e)) return@launch
@@ -179,7 +192,7 @@ class MenuAdminActivity : BaseActivity() {
                 }
             }
         }
-        dialog.show()
+        sheet.show()
         name.requestFocus()
     }
 
@@ -187,59 +200,55 @@ class MenuAdminActivity : BaseActivity() {
 
     private fun editItem(item: Item?) {
         if (categories.isEmpty()) {
-            showError("No categories", if (canCreateCategory) "Add a category first (+ Category)." else "Ask an admin to add a category first.")
+            showError("No categories yet", if (canCreateCategory) "Add a category first with “New category”." else "Ask an admin to add a category first.")
             return
         }
-        val box = dialogBox()
-        box.addView(heading(if (item == null) "New menu item" else "Edit menu item"))
+        val sheet = Sheet(this).title(if (item == null) "New menu item" else "Edit “${item.name}”")
+        val body = sheet.body
 
-        box.addView(label("Name"))
-        val name = field("e.g. Chicken Burger", InputType.TYPE_TEXT_FLAG_CAP_WORDS, 255).apply { setText(item?.name.orEmpty()) }
-        box.addView(name)
+        body.addView(label("Name"))
+        val name = field("e.g. Chicken Burger", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_WORDS).apply { setText(item?.name.orEmpty()) }
+        body.addView(name)
 
-        box.addView(label("Price (Rs.)"))
-        val price = field("e.g. 350", 0, 9).apply {
-            inputType = InputType.TYPE_CLASS_NUMBER
+        body.addView(label("Price in rupees"))
+        val price = field("e.g. 350", InputType.TYPE_CLASS_NUMBER, 9).apply {
             setText(item?.price?.toString().orEmpty())
+            fontFeatureSettings = "tnum"
         }
-        box.addView(price)
+        body.addView(price)
 
-        box.addView(label("Category"))
-        val spinner = Spinner(this).apply {
-            adapter = ArrayAdapter(this@MenuAdminActivity, android.R.layout.simple_spinner_dropdown_item, categories.map { it.name })
-            val pre = item?.categoryId ?: selected
-            setSelection(categories.indexOfFirst { it.id == pre }.coerceAtLeast(0))
-            setBackgroundResource(R.drawable.field)
-            setPadding(dp(4), 0, dp(4), 0)
+        body.addView(label("Category"))
+        var categoryId = item?.categoryId ?: selected.takeIf { it != 0 } ?: categories.first().id
+        val pills = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        fun buildPills() {
+            pills.removeAllViews()
+            for (c in categories) pills.addView(chip(c.name, c.id == categoryId) { categoryId = c.id; buildPills() })
         }
-        box.addView(spinner, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)))
+        buildPills()
+        body.addView(HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(pills) })
 
-        box.addView(label("Description (optional)"))
-        val description = field("", InputType.TYPE_TEXT_FLAG_CAP_SENTENCES, 1000).apply { setText(item?.description.orEmpty()) }
-        box.addView(description)
+        body.addView(label("Description (optional)"))
+        val description = field("Shown on the web menu", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES, 1000)
+            .apply { setText(item?.description.orEmpty()) }
+        body.addView(description)
 
         var active: CheckBox? = null
         if (item != null) {
             active = CheckBox(this).apply {
-                text = "Active (shown on the POS)"
+                text = "On the menu (shown on the POS)"
                 textSize = 16f
                 isChecked = true
-                setPadding(0, dp(8), 0, dp(4))
+                buttonTintList = ColorStateList.valueOf(getColor(R.color.primary))
+                setPadding(dp(4), dp(10), 0, dp(10))
             }
-            box.addView(active)
+            body.addView(active, lp().apply { topMargin = dp(10) })
             if (item.foodCost > 0) {
-                box.addView(TextView(this).apply {
-                    text = "Food cost ${rs(Math.round(item.foodCost).toInt())} per portion (recipes are edited on the web)"
-                    textSize = 13f
-                    setTextColor(getColor(R.color.muted))
-                })
+                body.addView(text("Food cost ${rs(Math.round(item.foodCost).toInt())} per portion. Recipes are edited on the web.", 13f, R.color.muted))
             }
         }
 
-        val scroll = ScrollView(this).apply { addView(box) }
-        val dialog = AlertDialog.Builder(this).setView(scroll).create()
-        val save = addDialogButton(box, dialog, if (item == null) "Add item" else "Save", primary = true) {}
-        addDialogButton(box, dialog, "Cancel", primary = false) { hideKeyboard() }
+        val save = sheet.button(if (item == null) "Add to the menu" else "Save changes", keepOpen = true)
+        sheet.button("Cancel", ButtonKind.SECONDARY) { hideKeyboard() }
 
         save.setOnClickListener {
             val n = name.text.toString().trim()
@@ -248,8 +257,7 @@ class MenuAdminActivity : BaseActivity() {
                 n.isEmpty() -> { name.error = "Enter a name"; return@setOnClickListener }
                 p == null -> { price.error = "Enter the price in rupees"; return@setOnClickListener }
             }
-            val categoryId = categories[spinner.selectedItemPosition].id
-            val body = JSONObject()
+            val json = JSONObject()
                 .put("name", n)
                 .put("price", p)
                 .put("category_id", categoryId)
@@ -260,15 +268,15 @@ class MenuAdminActivity : BaseActivity() {
                 lifecycleScope.launch {
                     try {
                         if (item == null) {
-                            api.post("/menu", body)
+                            api.post("/menu", json)
                             toast("“$n” added to the menu")
                         } else {
-                            active?.let { body.put("is_active", it.isChecked) }
-                            api.put("/menu/${item.id}", body)
-                            toast(if (active?.isChecked == false) "“$n” deactivated" else "“$n” saved")
+                            active?.let { json.put("is_active", it.isChecked) }
+                            api.put("/menu/${item.id}", json)
+                            toast(if (active?.isChecked == false) "“$n” taken off the menu" else "“$n” saved")
                         }
                         hideKeyboard()
-                        dialog.dismiss()
+                        sheet.dismiss()
                         changed()
                     } catch (e: ApiException) {
                         if (handleAuth(e)) return@launch
@@ -279,43 +287,15 @@ class MenuAdminActivity : BaseActivity() {
             }
 
             if (active?.isChecked == false) {
-                AlertDialog.Builder(this)
-                    .setTitle("Deactivate “$n”?")
-                    .setMessage("It disappears from the POS and this list. Past sales keep it. To bring it back, use the web app's Menu page.")
-                    .setPositiveButton("Deactivate") { _, _ -> submit() }
-                    .setNegativeButton("Cancel", null)
-                    .show()
+                confirm("Take “$n” off the menu?",
+                    "It disappears from the POS and this list. Past sales keep it. To bring it back, use the web app's Menu page.",
+                    "Take it off", danger = true) { submit() }
             } else {
                 submit()
             }
         }
-        dialog.show()
+        sheet.show()
         if (item == null) name.requestFocus()
-    }
-
-    private fun heading(text: String) = TextView(this).apply {
-        this.text = text
-        textSize = 20f
-        setTypeface(typeface, Typeface.BOLD)
-        setPadding(0, 0, 0, dp(6))
-    }
-
-    private fun label(text: String) = TextView(this).apply {
-        this.text = text
-        textSize = 14f
-        setTextColor(getColor(R.color.muted))
-        setPadding(0, dp(10), 0, dp(4))
-    }
-
-    private fun field(hint: String, flags: Int, max: Int) = EditText(this).apply {
-        this.hint = hint
-        textSize = 17f
-        inputType = InputType.TYPE_CLASS_TEXT or flags
-        isSingleLine = true
-        filters = arrayOf(InputFilter.LengthFilter(max))
-        setBackgroundResource(R.drawable.field)
-        setPadding(dp(12), 0, dp(12), 0)
-        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52))
     }
 
     // ── List ──
@@ -333,7 +313,7 @@ class MenuAdminActivity : BaseActivity() {
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
-            Holder(LayoutInflater.from(parent.context).inflate(R.layout.item_sale, parent, false))
+            Holder(LayoutInflater.from(parent.context).inflate(R.layout.item_sale, parent, false).also { Fonts.apply(it) })
 
         override fun getItemCount() = rows.size
 
@@ -346,6 +326,7 @@ class MenuAdminActivity : BaseActivity() {
             h.status.visibility = if (item.available) View.GONE else View.VISIBLE
             h.status.text = "Out of stock"
             h.status.setTextColor(getColor(R.color.danger))
+            h.status.backgroundTintList = ColorStateList.valueOf(getColor(R.color.danger_soft))
             h.itemView.isClickable = canEditItem
             h.itemView.setOnClickListener(if (canEditItem) View.OnClickListener { editItem(item) } else null)
         }

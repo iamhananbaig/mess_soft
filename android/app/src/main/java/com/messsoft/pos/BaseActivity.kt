@@ -1,17 +1,25 @@
 package com.messsoft.pos
 
-import android.app.AlertDialog
 import android.content.Intent
-import android.graphics.Typeface
-import android.util.TypedValue
+import android.content.res.ColorStateList
+import android.os.Build
+import android.text.InputFilter
+import android.text.InputType
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.InputMethodManager
-import android.widget.Button
+import android.widget.EditText
+import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import org.json.JSONObject
@@ -28,8 +36,120 @@ object AppState {
     var menuChanged = false
 }
 
-/** Signed-in screens: session, API, the receipt print flow and small UI helpers. */
-abstract class BaseActivity : ComponentActivity() {
+/**
+ * Every screen: edge-to-edge window with system-bar and keyboard insets, the app font,
+ * the shared top bar, and dialogs (bottom sheets and pop-ups).
+ */
+abstract class ScreenActivity : ComponentActivity() {
+    private var windowReady = false
+
+    override fun onContentChanged() {
+        super.onContentChanged()
+        if (windowReady) return
+        windowReady = true
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        if (Build.VERSION.SDK_INT < 27) window.navigationBarColor = getColor(R.color.ink) // no dark nav icons before 8.1
+        val content = findViewById<ViewGroup>(android.R.id.content)
+        content.setBackgroundColor(getColor(R.color.surface))
+        ViewCompat.setOnApplyWindowInsetsListener(content) { v, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            v.setPadding(bars.left, bars.top, bars.right, maxOf(bars.bottom, ime.bottom))
+            WindowInsetsCompat.CONSUMED
+        }
+        Fonts.install(window.decorView)
+    }
+
+    // ── Top bar (view_topbar) ──
+
+    protected fun topBar(title: String, back: Boolean = true) {
+        findViewById<TextView>(R.id.title).text = title
+        val backButton = findViewById<View>(R.id.back)
+        if (back) backButton.setOnClickListener { onBackPressedDispatcher.onBackPressed() }
+        else {
+            backButton.visibility = View.GONE
+            findViewById<View>(R.id.titleBox).setPadding(dp(14), 0, dp(8), 0)
+        }
+    }
+
+    protected fun topSummary(text: CharSequence?) {
+        findViewById<TextView>(R.id.summary).apply {
+            this.text = text
+            visibility = if (text.isNullOrEmpty()) View.GONE else View.VISIBLE
+        }
+    }
+
+    protected fun addTopAction(icon: Int, description: String, onClick: () -> Unit): FrameLayout =
+        topAction(icon, description, onClick).also { findViewById<LinearLayout>(R.id.actions).addView(it) }
+
+    /** The thin loading line under the top bar, for refreshes over content already shown. */
+    protected fun busy(on: Boolean) {
+        findViewById<ProgressBar>(R.id.progress)?.visibility = if (on) View.VISIBLE else View.INVISIBLE
+    }
+
+    // ── Dialogs ──
+
+    protected fun showError(title: String, message: String?) {
+        Sheet(this, centered = true).title(title).message(message ?: "").apply { button("OK", ButtonKind.SECONDARY) }.show()
+    }
+
+    protected fun confirm(title: String, message: String, action: String, danger: Boolean = false, onConfirm: () -> Unit) {
+        Sheet(this, centered = true).title(title).message(message).apply {
+            buttonPair("Cancel", action, if (danger) ButtonKind.DANGER else ButtonKind.PRIMARY, onPrimary = onConfirm)
+        }.show()
+    }
+
+    /** A pop-up with a spinner, for short waits that block the screen. */
+    protected fun progressPopup(message: String): Pair<Sheet, TextView> {
+        val sheet = Sheet(this, centered = true).cancelable(false)
+        val label = text(message, 16f)
+        sheet.body.addView(LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(ProgressBar(context).apply { indeterminateTintList = ColorStateList.valueOf(getColor(R.color.primary)) }, lp(dp(32), dp(32)).apply { marginEnd = dp(16) })
+            addView(label, lp(0, weight = 1f))
+        })
+        return sheet.show() to label
+    }
+
+    protected fun field(hint: String, inputType: Int = InputType.TYPE_CLASS_TEXT, maxLength: Int = 255) = EditText(this).apply {
+        this.hint = hint
+        textSize = 17f
+        this.inputType = inputType
+        isSingleLine = inputType and InputType.TYPE_TEXT_FLAG_MULTI_LINE == 0
+        filters = arrayOf(InputFilter.LengthFilter(maxLength))
+        setBackgroundResource(R.drawable.field)
+        setPadding(dp(14), dp(12), dp(14), dp(12))
+        minHeight = dp(52)
+        layoutParams = lp()
+    }
+
+    protected fun label(value: String) = text(value, 14f, R.color.muted, bold = true).apply { setPadding(0, dp(14), 0, dp(6)) }
+
+    /** Filter chip; selected chips are filled. */
+    protected fun chip(label: String, selected: Boolean, onClick: () -> Unit): TextView = TextView(this).apply {
+        text = label
+        textSize = 15f
+        gravity = Gravity.CENTER
+        minHeight = dp(38)
+        setPadding(dp(16), 0, dp(16), 0)
+        setBackgroundResource(R.drawable.pill)
+        isSelected = selected
+        setTextColor(if (selected) getColor(R.color.surface) else getColor(R.color.text))
+        setOnClickListener { onClick() }
+        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(8) }
+    }
+
+    protected fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+
+    protected fun hideKeyboard() {
+        val imm = getSystemService(InputMethodManager::class.java)
+        currentFocus?.let { imm.hideSoftInputFromWindow(it.windowToken, 0); it.clearFocus() }
+    }
+}
+
+/** Signed-in screens: session, API, receipt printing, void review and app updates. */
+abstract class BaseActivity : ScreenActivity() {
     protected lateinit var session: Session
     protected lateinit var api: Api
 
@@ -47,64 +167,90 @@ abstract class BaseActivity : ComponentActivity() {
 
     // ── Receipt printing ──
 
+    /** Reprint: a sheet with both copies — accounts prints straight away, customer on a tap. */
+    protected fun reprint(saleId: Int) {
+        val sheet = Sheet(this).title("Reprint sale #$saleId", "The accounts copy prints first.")
+        ReceiptCopies(saleId, reprint = true, container = sheet.body)
+        sheet.button("Done", ButtonKind.SECONDARY)
+        sheet.show()
+    }
+
     /**
-     * After a sale (or a reprint): the accounts copy prints straight away, then the
-     * cashier is asked whether the customer wants theirs.
+     * The two receipt copies as status rows. The accounts copy prints at once; the customer
+     * copy waits for the cashier's tap, and is offered once the accounts copy is done (or failed).
      */
-    protected fun printAccountsThenAsk(saleId: Int, saleTotal: Int?, change: Int?, reprint: Boolean) {
-        printSale(saleId, EscPos.Copy.ACCOUNTS, reprint) {
-            askCustomerCopy(saleId, saleTotal, change, reprint)
-        }
-    }
+    protected inner class ReceiptCopies(private val saleId: Int, private val reprint: Boolean, container: LinearLayout) {
+        private var data: ReceiptData? = null
+        private var printing = false
+        private var customerOffered = false
+        private val accounts = CopyRow(EscPos.Copy.ACCOUNTS, "Accounts copy")
+        private val customer = CopyRow(EscPos.Copy.CUSTOMER, "Customer copy")
 
-    private fun askCustomerCopy(saleId: Int, saleTotal: Int?, change: Int?, reprint: Boolean) {
-        val box = dialogBox()
-        box.addView(TextView(this).apply {
-            text = if (reprint) "Sale #$saleId reprinted" else "Sale #$saleId saved"
-            textSize = 20f
-            setTypeface(typeface, Typeface.BOLD)
-        })
-        if (saleTotal != null) box.addView(TextView(this).apply { text = "Total ${rs(saleTotal)}"; textSize = 18f; setPadding(0, dp(8), 0, 0) })
-        if (change != null) {
-            box.addView(TextView(this).apply {
-                text = "Change ${rs(change)}"
-                textSize = 26f
-                setTypeface(typeface, Typeface.BOLD)
-                setTextColor(getColor(R.color.primary_dark))
-            })
+        init {
+            container.addView(accounts.view)
+            container.addView(customer.view, lp().apply { topMargin = dp(8) })
+            customer.show(Icon.WAITING, "Offered after the accounts copy", null)
+            accounts.print()
         }
-        box.addView(TextView(this).apply {
-            text = "Print the customer copy?"
-            textSize = 16f
-            setTextColor(getColor(R.color.muted))
-            setPadding(0, dp(12), 0, 0)
-        })
-        val dialog = AlertDialog.Builder(this).setView(box).setCancelable(false).create()
-        addDialogButton(box, dialog, "Print customer copy", primary = true) { printSale(saleId, EscPos.Copy.CUSTOMER, reprint) {} }
-        addDialogButton(box, dialog, "No", primary = false) {}
-        dialog.show()
-    }
 
-    /** Prints one copy; [then] runs after it printed, or after the cashier skips a failed print. */
-    private fun printSale(saleId: Int, copy: EscPos.Copy, reprint: Boolean, then: () -> Unit) {
-        val name = if (copy == EscPos.Copy.ACCOUNTS) "accounts" else "customer"
-        val progress = AlertDialog.Builder(this).setMessage("Printing $name copy…").setCancelable(false).show()
-        lifecycleScope.launch {
-            try {
-                val data = ReceiptData.from(api.get("/sales/$saleId/receipt") as JSONObject)
-                SunmiPrinter.print(this@BaseActivity, EscPos.receipt(data, copy, AppState.receiptSettings, reprint))
-                progress.dismiss()
-                then()
-            } catch (e: Exception) {
-                progress.dismiss()
-                if (e is ApiException && handleAuth(e)) return@launch
-                AlertDialog.Builder(this@BaseActivity)
-                    .setTitle("Print failed")
-                    .setMessage("${e.message}\n\nSale #$saleId is saved. You can reprint it later from ⋮ → Sales.")
-                    .setCancelable(false)
-                    .setPositiveButton("Retry") { _, _ -> printSale(saleId, copy, reprint, then) }
-                    .setNegativeButton("Skip") { _, _ -> then() }
-                    .show()
+        private inner class CopyRow(val copy: EscPos.Copy, label: String) {
+            private val iconBox = FrameLayout(this@BaseActivity).apply { setBackgroundResource(R.drawable.icon_circle) }
+            private val icon = ImageView(this@BaseActivity)
+            private val spinner = ProgressBar(this@BaseActivity).apply {
+                indeterminateTintList = ColorStateList.valueOf(getColor(R.color.primary))
+                visibility = View.GONE
+            }
+            private val status = text("", 14f, R.color.muted)
+            private val action = button("Print", ButtonKind.SECONDARY) { print() }.apply { textSize = 15f; minWidth = dp(88) }
+            val view = LinearLayout(this@BaseActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setBackgroundResource(R.drawable.card)
+                setPadding(dp(12), dp(10), dp(10), dp(10))
+                iconBox.addView(icon, FrameLayout.LayoutParams(dp(22), dp(22), Gravity.CENTER))
+                iconBox.addView(spinner, FrameLayout.LayoutParams(dp(26), dp(26), Gravity.CENTER))
+                addView(iconBox, lp(dp(42), dp(42)).apply { marginEnd = dp(12) })
+                addView(LinearLayout(context).apply {
+                    orientation = LinearLayout.VERTICAL
+                    addView(text(label, 16f, bold = true))
+                    addView(status)
+                }, lp(0, weight = 1f))
+                addView(action, lp(ViewGroup.LayoutParams.WRAP_CONTENT, dp(44)).apply { marginStart = dp(8) })
+            }
+
+            fun show(state: Icon?, message: String, actionLabel: String?) {
+                spinner.visibility = if (state == null) View.VISIBLE else View.GONE
+                icon.visibility = if (state == null) View.GONE else View.VISIBLE
+                val s = state ?: Icon.READY
+                icon.setImageResource(s.res)
+                icon.imageTintList = ColorStateList.valueOf(getColor(s.tint))
+                iconBox.backgroundTintList = ColorStateList.valueOf(getColor(s.bg))
+                status.text = message
+                status.setTextColor(getColor(if (state == Icon.FAILED) R.color.danger else R.color.muted))
+                action.visibility = if (actionLabel == null) View.GONE else View.VISIBLE
+                action.text = actionLabel
+            }
+
+            fun print() {
+                if (printing) return
+                printing = true
+                show(null, "Printing…", null)
+                lifecycleScope.launch {
+                    try {
+                        val receipt = data ?: ReceiptData.from(api.get("/sales/$saleId/receipt") as JSONObject).also { data = it }
+                        SunmiPrinter.print(this@BaseActivity, EscPos.receipt(receipt, copy, AppState.receiptSettings, reprint))
+                        printing = false
+                        show(Icon.DONE, "Printed", "Again")
+                    } catch (e: Exception) {
+                        printing = false
+                        if (e is ApiException && handleAuth(e)) return@launch
+                        show(Icon.FAILED, e.message ?: "Print failed", "Retry")
+                    }
+                    if (copy == EscPos.Copy.ACCOUNTS && !customerOffered) {
+                        customerOffered = true
+                        customer.show(Icon.READY, "If the customer wants one", "Print")
+                    }
+                }
             }
         }
     }
@@ -116,27 +262,14 @@ abstract class BaseActivity : ComponentActivity() {
      * removes it from takings, so it asks once more. [onDone] runs after either.
      */
     protected fun reviewVoid(requestId: Int, saleId: Int, total: Int, requester: String, reason: String, onDone: () -> Unit) {
-        val box = dialogBox()
-        box.addView(TextView(this).apply {
-            text = "Void sale #$saleId (${rs(total)})"
-            textSize = 20f
-            setTypeface(typeface, Typeface.BOLD)
-        })
-        box.addView(TextView(this).apply {
-            text = "Requested by $requester\nReason: $reason"
-            textSize = 16f
-            setPadding(0, dp(8), 0, dp(10))
-        })
-        val note = android.widget.EditText(this).apply {
-            hint = "Note (optional)"
-            textSize = 16f
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
-            filters = arrayOf(android.text.InputFilter.LengthFilter(255))
-            setBackgroundResource(R.drawable.field)
-            setPadding(dp(12), dp(10), dp(12), dp(10))
-        }
-        box.addView(note, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(52)))
-        val dialog = AlertDialog.Builder(this).setView(box).create()
+        val sheet = Sheet(this).title("Void sale #$saleId?", "${rs(total)} · requested by $requester")
+        sheet.body.addView(text(reason.ifEmpty { "No reason given" }, 16f).apply {
+            setBackgroundResource(R.drawable.status_pill)
+            setPadding(dp(14), dp(12), dp(14), dp(12))
+        }, lp())
+        sheet.body.addView(label("Note for the cashier (optional)"))
+        val note = field("e.g. Checked with the customer", InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES)
+        sheet.body.addView(note)
 
         fun send(action: String) {
             lifecycleScope.launch {
@@ -153,18 +286,13 @@ abstract class BaseActivity : ComponentActivity() {
             }
         }
 
-        addDialogButton(box, dialog, "Approve void", primary = true) {
+        sheet.button("Approve void", ButtonKind.DANGER) {
             hideKeyboard()
-            AlertDialog.Builder(this)
-                .setTitle("Approve void of sale #$saleId?")
-                .setMessage("Its stock is returned and ${rs(total)} is removed from today's takings. This can't be undone.")
-                .setPositiveButton("Approve") { _, _ -> send("approve") }
-                .setNegativeButton("Cancel", null)
-                .show()
-        }.setBackgroundResource(R.drawable.btn_danger)
-        addDialogButton(box, dialog, "Reject", primary = false) { hideKeyboard(); send("reject") }
-        addDialogButton(box, dialog, "Cancel", primary = false) { hideKeyboard() }
-        dialog.show()
+            confirm("Approve the void?", "Sale #$saleId's stock is returned and ${rs(total)} is taken off the takings. This can't be undone.",
+                "Approve", danger = true) { send("approve") }
+        }
+        sheet.button("Reject request", ButtonKind.SECONDARY) { hideKeyboard(); send("reject") }
+        sheet.show()
     }
 
     // ── App updates ──
@@ -176,7 +304,7 @@ abstract class BaseActivity : ComponentActivity() {
     protected fun checkForUpdates(manual: Boolean) {
         val now = System.currentTimeMillis()
         if (!manual && now - session.lastUpdateCheck < 6 * 60 * 60 * 1000L) return
-        val progress = if (manual) AlertDialog.Builder(this).setMessage("Checking for updates…").setCancelable(false).show() else null
+        val progress = if (manual) progressPopup("Checking for updates…").first else null
         lifecycleScope.launch {
             val installed = Updater.installedVersion(this@BaseActivity)
             try {
@@ -186,7 +314,7 @@ abstract class BaseActivity : ComponentActivity() {
                 if (latest != null && Updater.isNewer(latest.version, installed)) {
                     offerUpdate(latest, installed)
                 } else if (manual) {
-                    showError("Up to date", "You have the latest version ($installed).")
+                    showError("You're up to date", "Version $installed is the latest.")
                 }
             } catch (e: Exception) {
                 progress?.dismiss()
@@ -196,47 +324,28 @@ abstract class BaseActivity : ComponentActivity() {
     }
 
     private fun offerUpdate(release: Updater.Release, installed: String) {
-        val box = dialogBox()
-        box.addView(TextView(this).apply {
-            text = "Update available: ${release.version}"
-            textSize = 20f
-            setTypeface(typeface, Typeface.BOLD)
-        })
-        box.addView(TextView(this).apply {
-            text = "Installed: $installed · Download: ${"%.1f".format(java.util.Locale.US, release.size / 1_048_576.0)} MB"
-            textSize = 14f
-            setTextColor(getColor(R.color.muted))
-            setPadding(0, dp(4), 0, dp(8))
-        })
-        if (release.notes.isNotEmpty()) {
-            box.addView(TextView(this).apply {
-                text = release.notes.take(1500)
-                textSize = 15f
-            })
-        }
-        val dialog = AlertDialog.Builder(this).setView(android.widget.ScrollView(this).apply { addView(box) }).create()
-        addDialogButton(box, dialog, "Update now", primary = true) { downloadAndInstall(release) }
-        addDialogButton(box, dialog, "Later", primary = false) {}
-        dialog.show()
+        val size = "%.1f".format(java.util.Locale.US, release.size / 1_048_576.0)
+        val sheet = Sheet(this).title("Version ${release.version} is available", "You have $installed · $size MB download")
+        if (release.notes.isNotEmpty()) sheet.message(release.notes.take(1500))
+        sheet.button("Update now") { downloadAndInstall(release) }
+        sheet.button("Later", ButtonKind.SECONDARY)
+        sheet.show()
     }
 
     private fun downloadAndInstall(release: Updater.Release) {
-        val progress = AlertDialog.Builder(this).setMessage("Downloading ${release.version}… 0%").setCancelable(false).show()
+        val (popup, label) = progressPopup("Downloading ${release.version}… 0%")
         lifecycleScope.launch {
             try {
                 val apk = Updater.download(this@BaseActivity, release) { percent ->
-                    progress.setMessage("Downloading ${release.version}… $percent%")
+                    label.text = "Downloading ${release.version}… $percent%"
                 }
-                progress.dismiss()
+                popup.dismiss()
                 Updater.install(this@BaseActivity, apk)
             } catch (e: Exception) {
-                progress.dismiss()
-                AlertDialog.Builder(this@BaseActivity)
-                    .setTitle("Update failed")
-                    .setMessage(e.message ?: "Download failed")
-                    .setPositiveButton("Retry") { _, _ -> downloadAndInstall(release) }
-                    .setNegativeButton("Close", null)
-                    .show()
+                popup.dismiss()
+                Sheet(this@BaseActivity, centered = true).title("Update failed").message(e.message ?: "Download failed").apply {
+                    buttonPair("Close", "Retry") { downloadAndInstall(release) }
+                }.show()
             }
         }
     }
@@ -256,49 +365,12 @@ abstract class BaseActivity : ComponentActivity() {
         startActivity(Intent(this, LoginActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK or Intent.FLAG_ACTIVITY_NEW_TASK))
         finish()
     }
+}
 
-    // ── UI helpers ──
-
-    protected fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-
-    protected fun dp(v: Int) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), resources.displayMetrics).toInt()
-
-    protected fun hideKeyboard() {
-        val imm = getSystemService(InputMethodManager::class.java)
-        currentFocus?.let { imm.hideSoftInputFromWindow(it.windowToken, 0); it.clearFocus() }
-    }
-
-    protected fun showError(title: String, message: String?) {
-        AlertDialog.Builder(this).setTitle(title).setMessage(message).setPositiveButton("OK", null).show()
-    }
-
-    /** Pill-shaped filter chip; [selected] chips are filled. */
-    protected fun chip(label: String, selected: Boolean, onClick: () -> Unit): TextView = TextView(this).apply {
-        text = label
-        textSize = 15f
-        gravity = Gravity.CENTER
-        minHeight = dp(40)
-        setPadding(dp(16), 0, dp(16), 0)
-        setBackgroundResource(R.drawable.chip)
-        isSelected = selected
-        setTextColor(if (selected) 0xFFFFFFFF.toInt() else getColor(R.color.text))
-        setOnClickListener { onClick() }
-        layoutParams = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = dp(8) }
-    }
-
-    /** Vertical container for a custom dialog body. */
-    protected fun dialogBox() = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
-        setPadding(dp(20), dp(20), dp(20), dp(12))
-    }
-
-    /** Full-width dialog button that dismisses [dialog] and then runs [onClick]. */
-    protected fun addDialogButton(box: LinearLayout, dialog: AlertDialog, label: String, primary: Boolean, onClick: () -> Unit): Button {
-        val b = Button(this, null, 0, if (primary) R.style.PrimaryButton else R.style.SecondaryButton)
-        b.text = label
-        b.gravity = Gravity.CENTER
-        b.setOnClickListener { dialog.dismiss(); onClick() }
-        box.addView(b, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(if (primary) 56 else 50)).apply { topMargin = dp(if (primary) 16 else 8) })
-        return b
-    }
+/** Look of a receipt-copy row's icon. */
+private enum class Icon(val res: Int, val tint: Int, val bg: Int) {
+    WAITING(R.drawable.ic_print, R.color.muted, R.color.bg),
+    READY(R.drawable.ic_print, R.color.primary, R.color.primary_soft),
+    DONE(R.drawable.ic_check, R.color.success, R.color.success_soft),
+    FAILED(R.drawable.ic_error, R.color.danger, R.color.danger_soft),
 }

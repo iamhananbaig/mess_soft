@@ -1,15 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- A row in Sales, Void requests and Manage menu: a card with title, detail, amount and status. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="?android:attr/selectableItemBackground"
+    android:layout_marginStart="12dp"
+    android:layout_marginTop="4dp"
+    android:layout_marginEnd="12dp"
+    android:layout_marginBottom="4dp"
+    android:background="@drawable/tile"
     android:gravity="center_vertical"
     android:minHeight="72dp"
     android:orientation="horizontal"
-    android:paddingStart="16dp"
-    android:paddingTop="10dp"
-    android:paddingEnd="16dp"
-    android:paddingBottom="10dp">
+    android:paddingStart="14dp"
+    android:paddingTop="12dp"
+    android:paddingEnd="14dp"
+    android:paddingBottom="12dp">
 
     <LinearLayout
         android:layout_width="0dp"
@@ -20,13 +25,16 @@
             android:id="@+id/title"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:fontFeatureSettings="tnum"
             android:textSize="16sp"
             android:textStyle="bold" />
         <TextView
             android:id="@+id/items"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
             android:ellipsize="end"
+            android:lineSpacingMultiplier="1.1"
             android:maxLines="2"
             android:textColor="@color/muted"
             android:textSize="14sp" />
@@ -42,13 +50,21 @@
             android:id="@+id/amount"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:fontFeatureSettings="tnum"
             android:textSize="17sp"
             android:textStyle="bold" />
         <TextView
             android:id="@+id/status"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textSize="13sp"
-            android:textStyle="bold" />
+            android:layout_marginTop="4dp"
+            android:background="@drawable/status_pill"
+            android:paddingStart="8dp"
+            android:paddingTop="2dp"
+            android:paddingEnd="8dp"
+            android:paddingBottom="2dp"
+            android:textSize="12sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
     </LinearLayout>
 </LinearLayout>

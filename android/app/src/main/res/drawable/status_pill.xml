@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Status words (Voided, Pending…); the code tints it to the status colour. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="@color/bg" />
+    <corners android:radius="8dp" />
+</shape>

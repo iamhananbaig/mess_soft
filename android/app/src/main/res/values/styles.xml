@@ -1,12 +1,49 @@
 <resources>
+    <!-- Fonts: Fonts.kt swaps every TextView to Plus Jakarta Sans (textStyle bold → SemiBold,
+         bold at 22sp and up → ExtraBold), since XML fonts need Android 8 and the V2 runs 7.1. -->
     <style name="AppTheme" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:colorPrimary">@color/primary</item>
-        <item name="android:colorPrimaryDark">@color/primary_dark</item>
+        <item name="android:colorPrimaryDark">@color/surface</item>
         <item name="android:colorAccent">@color/primary</item>
+        <item name="android:colorControlActivated">@color/primary</item>
         <item name="android:windowBackground">@color/bg</item>
         <item name="android:textColor">@color/text</item>
-        <item name="android:statusBarColor">@color/primary_dark</item>
+        <item name="android:textColorHint">#9A9EB0</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@color/surface</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:datePickerDialogTheme">@style/PickerDialog</item>
     </style>
+
+    <style name="PickerDialog" parent="android:Theme.Material.Light.Dialog">
+        <item name="android:colorAccent">@color/primary</item>
+        <item name="android:colorPrimary">@color/primary</item>
+    </style>
+
+    <!-- Bottom sheet and centred pop-up dialogs (our own surface, rounded corners). -->
+    <style name="Sheet" parent="android:Theme.Material.Light.Dialog.NoActionBar">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsFloating">true</item>
+        <item name="android:backgroundDimEnabled">true</item>
+        <item name="android:backgroundDimAmount">0.5</item>
+        <item name="android:windowAnimationStyle">@style/SheetAnimation</item>
+        <item name="android:windowSoftInputMode">adjustResize</item>
+        <item name="android:colorAccent">@color/primary</item>
+        <item name="android:colorControlActivated">@color/primary</item>
+        <item name="android:textColor">@color/text</item>
+        <item name="android:textColorHint">#9A9EB0</item>
+    </style>
+
+    <style name="SheetAnimation">
+        <item name="android:windowEnterAnimation">@anim/sheet_in</item>
+        <item name="android:windowExitAnimation">@anim/sheet_out</item>
+    </style>
+
+    <style name="Popup" parent="Sheet">
+        <item name="android:windowAnimationStyle">@android:style/Animation.Dialog</item>
+    </style>
+
+    <!-- ── Components ── -->
 
     <style name="Field">
         <item name="android:layout_width">match_parent</item>
@@ -22,11 +59,12 @@
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">56dp</item>
         <item name="android:background">@drawable/btn_primary</item>
-        <item name="android:textColor">#FFFFFF</item>
-        <item name="android:textSize">18sp</item>
+        <item name="android:textColor">@color/on_primary</item>
+        <item name="android:textSize">17sp</item>
         <item name="android:textStyle">bold</item>
         <item name="android:textAllCaps">false</item>
         <item name="android:stateListAnimator">@null</item>
+        <item name="android:fontFeatureSettings">tnum</item>
     </style>
 
     <style name="SecondaryButton">
@@ -34,10 +72,21 @@
         <item name="android:background">@drawable/btn_secondary</item>
         <item name="android:textColor">@color/text</item>
         <item name="android:textSize">16sp</item>
+        <item name="android:textStyle">bold</item>
         <item name="android:textAllCaps">false</item>
         <item name="android:stateListAnimator">@null</item>
         <item name="android:paddingStart">12dp</item>
         <item name="android:paddingEnd">12dp</item>
+        <item name="android:fontFeatureSettings">tnum</item>
+    </style>
+
+    <!-- Borderless icon button for top bars. -->
+    <style name="IconButton">
+        <item name="android:layout_width">48dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:background">@drawable/ripple_round</item>
+        <item name="android:scaleType">center</item>
+        <item name="android:tint">@color/text</item>
     </style>
 
     <style name="Label">
@@ -45,7 +94,12 @@
         <item name="android:layout_height">wrap_content</item>
         <item name="android:textColor">@color/muted</item>
         <item name="android:textSize">14sp</item>
-        <item name="android:layout_marginTop">14dp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:layout_marginTop">16dp</item>
         <item name="android:layout_marginBottom">6dp</item>
+    </style>
+
+    <style name="Money">
+        <item name="android:fontFeatureSettings">tnum</item>
     </style>
 </resources>

@@ -7,12 +7,11 @@ import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
-import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
-class LoginActivity : ComponentActivity() {
+class LoginActivity : ScreenActivity() {
     private lateinit var session: Session
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -32,6 +31,17 @@ class LoginActivity : ComponentActivity() {
         val signIn = findViewById<Button>(R.id.signIn)
         val error = findViewById<TextView>(R.id.error)
 
+        val serverRow = findViewById<View>(R.id.serverRow)
+        val serverBox = findViewById<View>(R.id.serverBox)
+        fun showServerField() {
+            serverRow.visibility = View.GONE
+            serverBox.visibility = View.VISIBLE
+        }
+        findViewById<TextView>(R.id.serverText).text = "Server: ${session.server.removePrefix("https://").removePrefix("http://")}"
+        findViewById<View>(R.id.changeServer).setOnClickListener { showServerField(); server.requestFocus() }
+        if (session.server.isEmpty()) showServerField()
+        findViewById<TextView>(R.id.version).text = "Version ${Updater.installedVersion(this)}"
+
         server.setText(session.server)
         email.setText(session.email)
         if (session.email.isNotEmpty()) password.requestFocus()
@@ -43,7 +53,7 @@ class LoginActivity : ComponentActivity() {
             error.visibility = View.GONE
             when {
                 mail.isEmpty() || pass.isEmpty() -> return showError(error, "Enter your email and password.")
-                url.isEmpty() -> return showError(error, "Enter the server address (the web app's address).")
+                url.isEmpty() -> { showServerField(); return showError(error, "Enter the server address (the web app's address).") }
             }
             session.server = url
             session.email = mail
@@ -77,6 +87,7 @@ class LoginActivity : ComponentActivity() {
     }
 
     private fun showError(view: TextView, message: String) {
+        hideKeyboard()
         view.text = message
         view.visibility = View.VISIBLE
     }

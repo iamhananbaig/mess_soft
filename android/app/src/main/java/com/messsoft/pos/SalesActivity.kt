@@ -1,20 +1,19 @@
 package com.messsoft.pos
 
-import android.app.AlertDialog
 import android.app.DatePickerDialog
+import android.content.res.ColorStateList
 import android.graphics.Paint
-import android.graphics.Typeface
 import android.os.Bundle
 import android.text.InputType
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
-import android.widget.EditText
+import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.DividerItemDecoration
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.Job
@@ -61,10 +60,10 @@ class SalesActivity : BaseActivity() {
     private val seesEveryone by lazy { session.can("reports:view") || session.can("sales:void-approve") }
     private val canApprove by lazy { session.can("sales:void-approve") }
 
-    private lateinit var summary: TextView
-    private lateinit var message: TextView
-    private lateinit var dateButton: Button
-    private lateinit var nextDay: Button
+    private lateinit var state: StateView
+    private lateinit var dateButton: TextView
+    private lateinit var nextDay: ImageButton
+    private lateinit var stats: LinearLayout
     private lateinit var filters: LinearLayout
     private lateinit var printButton: Button
 
@@ -72,20 +71,17 @@ class SalesActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
         if (!requireSession()) return
         setContentView(R.layout.activity_list)
-        findViewById<TextView>(R.id.title).text = "Sales"
-        summary = findViewById(R.id.summary)
-        message = findViewById(R.id.message)
+        topBar(if (seesEveryone) "Sales" else "My sales")
+        addTopAction(R.drawable.ic_refresh, "Refresh") { load() }
+        state = StateView(window.decorView)
         dateButton = findViewById(R.id.date)
         nextDay = findViewById(R.id.nextDay)
+        stats = findViewById(R.id.stats)
         filters = findViewById(R.id.filters)
         printButton = findViewById(R.id.bottomButton)
 
-        findViewById<Button>(R.id.back).setOnClickListener { finish() }
-        findViewById<Button>(R.id.action).setOnClickListener { load() }
-        message.setOnClickListener { load() }
-
         findViewById<View>(R.id.dateBar).visibility = View.VISIBLE
-        findViewById<Button>(R.id.prevDay).setOnClickListener { shiftDay(-1) }
+        findViewById<View>(R.id.prevDay).setOnClickListener { shiftDay(-1) }
         nextDay.setOnClickListener { shiftDay(+1) }
         dateButton.setOnClickListener { pickDate() }
         if (!seesEveryone) cashierFilter = null // the API call is already limited to this user
@@ -97,7 +93,6 @@ class SalesActivity : BaseActivity() {
         findViewById<RecyclerView>(R.id.list).apply {
             layoutManager = LinearLayoutManager(this@SalesActivity)
             adapter = this@SalesActivity.adapter
-            addItemDecoration(DividerItemDecoration(this@SalesActivity, DividerItemDecoration.VERTICAL))
             itemAnimator = null
         }
         load()
@@ -125,10 +120,12 @@ class SalesActivity : BaseActivity() {
     // ── Loading ──
 
     private fun load() {
-        dateButton.text = if (isToday) "Today · ${Time.dayLong(day.time)}" else Time.dayLong(day.time)
+        dateButton.text = if (isToday) "Today, ${Time.dayLong(day.time)}" else Time.dayLong(day.time)
         nextDay.isEnabled = !isToday
         nextDay.alpha = if (isToday) 0.3f else 1f
-        showMessage("Loading…")
+        adapter.submit(emptyList())
+        stats.visibility = View.GONE
+        state.loading("Loading sales…")
         loadJob?.cancel()
         loadJob = lifecycleScope.launch {
             try {
@@ -136,9 +133,7 @@ class SalesActivity : BaseActivity() {
                 show()
             } catch (e: ApiException) {
                 if (handleAuth(e)) return@launch
-                summary.text = ""
-                adapter.submit(emptyList())
-                showMessage("${e.message}\n\nTap to try again.")
+                state.error(e) { load() }
             }
         }
     }
@@ -206,12 +201,25 @@ class SalesActivity : BaseActivity() {
         val valid = sales.filter { !it.voided }
         val voidedCount = sales.size - valid.size
         val pendingCount = sales.count { it.pendingVoid }
-        summary.text = buildString {
-            append("${valid.size} sale${if (valid.size == 1) "" else "s"} · ${rs(valid.sumOf { it.total })}")
-            if (voidedCount > 0) append(" · $voidedCount voided")
-            if (pendingCount > 0) append(" · $pendingCount pending")
+        stats.removeAllViews()
+        stats.visibility = View.VISIBLE
+        stats.addView(stat("Takings", rs(valid.sumOf { it.total }), R.color.text), lp(0, weight = 1.4f))
+        stats.addView(stat("Sales", valid.size.toString(), R.color.text), lp(0, weight = 1f).apply { marginStart = dp(8) })
+        stats.addView(stat(if (pendingCount > 0) "Voids · $pendingCount pending" else "Voids", voidedCount.toString(),
+            if (pendingCount > 0) R.color.warning else R.color.text), lp(0, weight = 1.4f).apply { marginStart = dp(8) })
+        when {
+            sales.isNotEmpty() -> state.hide()
+            isToday -> state.empty(R.drawable.ic_receipt_long, "No sales yet today", "Sales you make show up here.")
+            else -> state.empty(R.drawable.ic_receipt_long, "No sales on this day", "Pick another day with the arrows or the date.")
         }
-        if (sales.isEmpty()) showMessage("No sales on this day.") else message.visibility = View.GONE
+    }
+
+    private fun stat(label: String, value: String, color: Int) = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setBackgroundResource(R.drawable.status_pill)
+        setPadding(dp(12), dp(8), dp(12), dp(8))
+        addView(text(label, 12f, if (color == R.color.warning) R.color.warning else R.color.muted, bold = true).apply { isSingleLine = true })
+        addView(text(value, 18f, color, bold = true, money = true).apply { isSingleLine = true })
     }
 
     /** Managers: All + one chip per cashier who sold that day. */
@@ -231,16 +239,11 @@ class SalesActivity : BaseActivity() {
         }
     }
 
-    private fun showMessage(text: String) {
-        message.text = text
-        message.visibility = View.VISIBLE
-    }
-
     // ── Day-end summary ──
 
     private fun printSummary() {
         printButton.isEnabled = false
-        printButton.text = "Printing summary…"
+        printButton.text = "Printing the summary…"
         val date = day.time
         lifecycleScope.launch {
             try {
@@ -279,37 +282,31 @@ class SalesActivity : BaseActivity() {
     // ── Sale details ──
 
     private fun openSale(sale: Sale) {
-        val box = dialogBox()
-        box.addView(TextView(this).apply {
-            text = "Sale #${sale.id}"
-            textSize = 20f
-            setTypeface(typeface, Typeface.BOLD)
-        })
-        box.addView(TextView(this).apply {
-            text = "${sale.time} · ${sale.paymentLabel}" + if (seesEveryone) " · ${sale.cashier}" else ""
-            textSize = 15f
-            setTextColor(getColor(R.color.muted))
-            setPadding(0, dp(2), 0, dp(10))
-        })
-        for (line in sale.lines) {
-            box.addView(row("${line.quantity} × ${line.name}", rs(line.quantity * line.unitPrice), bold = false))
-        }
-        box.addView(row("Total", rs(sale.total), bold = true).apply { setPadding(0, dp(8), 0, 0) })
-        statusText(sale)?.let { (label, color) ->
+        val sheet = Sheet(this).title("Sale #${sale.id}",
+            "${sale.time} · ${sale.paymentLabel}" + if (seesEveryone) " · ${sale.cashier}" else "")
+        statusText(sale)?.let { (label, color, soft) ->
             val reason = sale.pendingRequest?.optString("reason")?.takeIf { it.isNotEmpty() }
-            box.addView(TextView(this).apply {
-                text = label + (reason?.let { "\nReason: $it" } ?: "") + (sale.rejectNote?.let { "\nNote: $it" } ?: "")
-                textSize = 15f
-                setTypeface(typeface, Typeface.BOLD)
-                setTextColor(getColor(color))
-                setPadding(0, dp(10), 0, 0)
-            })
+            val box = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                setBackgroundResource(R.drawable.status_pill)
+                backgroundTintList = ColorStateList.valueOf(getColor(soft))
+                setPadding(dp(14), dp(10), dp(14), dp(10))
+                addView(text(label, 15f, color, bold = true))
+                (reason?.let { "Reason: $it" } ?: sale.rejectNote?.let { "Note: $it" })?.let { addView(text(it, 14f, color)) }
+            }
+            sheet.body.addView(box, lp().apply { bottomMargin = dp(12) })
         }
+        for (line in sale.lines) {
+            sheet.body.addView(row("${line.quantity} × ${line.name}", rs(line.quantity * line.unitPrice), bold = false))
+        }
+        sheet.body.addView(row("Total", rs(sale.total), bold = true).apply {
+            setBackgroundResource(R.drawable.divider)
+            setPadding(0, dp(12), 0, 0)
+        }, lp().apply { topMargin = dp(8) })
 
-        val dialog = AlertDialog.Builder(this).setView(box).create()
         val request = sale.pendingRequest
         if (canApprove && request != null) {
-            addDialogButton(box, dialog, "Approve / reject void", primary = true) {
+            sheet.button("Review void request") {
                 reviewVoid(
                     requestId = request.optInt("id"),
                     saleId = sale.id,
@@ -319,46 +316,26 @@ class SalesActivity : BaseActivity() {
                 ) { load() }
             }
         }
-        addDialogButton(box, dialog, "Reprint", primary = request == null || !canApprove) {
-            printAccountsThenAsk(sale.id, sale.total, null, reprint = true)
-        }
+        sheet.button("Reprint receipt", if (request == null || !canApprove) ButtonKind.PRIMARY else ButtonKind.SECONDARY) { reprint(sale.id) }
         if (session.can("sales:void-request") && !sale.voided && !sale.pendingVoid) {
-            addDialogButton(box, dialog, "Request void", primary = false) { requestVoid(sale) }
-                .setTextColor(getColor(R.color.danger))
+            sheet.button("Request a void", ButtonKind.DANGER_QUIET) { requestVoid(sale) }
         }
-        addDialogButton(box, dialog, "Close", primary = false) {}
-        dialog.show()
+        sheet.show()
     }
 
     private fun requestVoid(sale: Sale) {
-        val box = dialogBox()
-        box.addView(TextView(this).apply {
-            text = "Void sale #${sale.id} (${rs(sale.total)})?"
-            textSize = 18f
-            setTypeface(typeface, Typeface.BOLD)
-        })
-        box.addView(TextView(this).apply {
-            text = "A manager must approve it. Until then, that day's cash closing is on hold."
-            textSize = 14f
-            setTextColor(getColor(R.color.muted))
-            setPadding(0, dp(6), 0, dp(10))
-        })
-        val reason = EditText(this).apply {
-            hint = "Reason (required)"
-            textSize = 16f
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or InputType.TYPE_TEXT_FLAG_MULTI_LINE
+        val sheet = Sheet(this).title("Void sale #${sale.id}?", "${rs(sale.total)} · a manager must approve it. Until then, the day's cash closing is on hold.")
+        sheet.body.addView(label("Reason"))
+        val reason = field("e.g. Customer cancelled the order",
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or InputType.TYPE_TEXT_FLAG_MULTI_LINE).apply {
             minLines = 2
             maxLines = 4
-            filters = arrayOf(android.text.InputFilter.LengthFilter(255))
-            setBackgroundResource(R.drawable.field)
-            setPadding(dp(12), dp(10), dp(12), dp(10))
+            gravity = Gravity.TOP
         }
-        box.addView(reason, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-
-        val dialog = AlertDialog.Builder(this).setView(box).create()
-        val submit = addDialogButton(box, dialog, "Send void request", primary = true) {}
-        addDialogButton(box, dialog, "Cancel", primary = false) { hideKeyboard() }
-        // Replace the default dismiss-then-run: stay open until the reason is valid and the request succeeds.
+        sheet.body.addView(reason)
+        val submit = sheet.button("Send void request", ButtonKind.DANGER, keepOpen = true)
+        sheet.button("Cancel", ButtonKind.SECONDARY) { hideKeyboard() }
+        // Stays open until the reason is valid and the request succeeds.
         submit.setOnClickListener {
             val text = reason.text.toString().trim()
             if (text.isEmpty()) {
@@ -371,7 +348,7 @@ class SalesActivity : BaseActivity() {
                 try {
                     api.post("/sales/${sale.id}/void-requests", JSONObject().put("reason", text))
                     hideKeyboard()
-                    dialog.dismiss()
+                    sheet.dismiss()
                     toast("Void requested for sale #${sale.id}")
                     load()
                 } catch (e: ApiException) {
@@ -382,23 +359,22 @@ class SalesActivity : BaseActivity() {
                 }
             }
         }
-        dialog.show()
+        sheet.show()
         reason.requestFocus()
     }
 
     private fun row(left: String, right: String, bold: Boolean) = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
-        val style = if (bold) Typeface.BOLD else Typeface.NORMAL
-        addView(TextView(context).apply { text = left; textSize = 16f; setTypeface(typeface, style) },
-            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        addView(TextView(context).apply { text = right; textSize = 16f; setTypeface(typeface, style); setPadding(dp(12), 0, 0, 0) })
+        setPadding(0, dp(4), 0, dp(4))
+        addView(text(left, 16f, bold = bold), lp(0, weight = 1f))
+        addView(text(right, 16f, bold = bold, money = true).apply { setPadding(dp(12), 0, 0, 0) })
     }
 
-    /** Status label and colour, or null for a normal sale. */
-    private fun statusText(sale: Sale): Pair<String, Int>? = when {
-        sale.voided -> "Voided" to R.color.danger
-        sale.pendingVoid -> "Void pending approval" to R.color.warning
-        sale.voidRejected -> "Void rejected" to R.color.muted
+    /** Status label, colour and tint, or null for a normal sale. */
+    private fun statusText(sale: Sale): Triple<String, Int, Int>? = when {
+        sale.voided -> Triple("Voided", R.color.danger, R.color.danger_soft)
+        sale.pendingVoid -> Triple("Void pending approval", R.color.warning, R.color.warning_soft)
+        sale.voidRejected -> Triple("Void rejected", R.color.muted, R.color.bg)
         else -> null
     }
 
@@ -417,22 +393,26 @@ class SalesActivity : BaseActivity() {
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
-            Holder(LayoutInflater.from(parent.context).inflate(R.layout.item_sale, parent, false))
+            Holder(LayoutInflater.from(parent.context).inflate(R.layout.item_sale, parent, false).also { Fonts.apply(it) })
 
         override fun getItemCount() = sales.size
 
         override fun onBindViewHolder(h: Holder, position: Int) {
             val sale = sales[position]
-            h.title.text = "#${sale.id} · ${sale.time} · ${sale.paymentLabel}"
+            h.title.text = "#${sale.id}  ·  ${sale.time}"
             val items = sale.lines.joinToString(", ") { "${it.quantity}× ${it.name}" }
-            h.items.text = if (seesEveryone && cashierFilter == null) "${sale.cashier} — $items" else items
+            h.items.text = (if (seesEveryone && cashierFilter == null) "${sale.cashier} · " else "") + "${sale.paymentLabel} · $items"
             h.amount.text = rs(sale.total)
             h.amount.paintFlags = if (sale.voided) h.amount.paintFlags or Paint.STRIKE_THRU_TEXT_FLAG
                 else h.amount.paintFlags and Paint.STRIKE_THRU_TEXT_FLAG.inv()
             h.amount.setTextColor(getColor(if (sale.voided) R.color.muted else R.color.text))
             val status = statusText(sale)
             h.status.visibility = if (status == null) View.GONE else View.VISIBLE
-            status?.let { (label, color) -> h.status.text = label; h.status.setTextColor(getColor(color)) }
+            status?.let { (label, color, soft) ->
+                h.status.text = if (sale.pendingVoid) "Void pending" else label
+                h.status.setTextColor(getColor(color))
+                h.status.backgroundTintList = ColorStateList.valueOf(getColor(soft))
+            }
             h.itemView.setOnClickListener { openSale(sale) }
         }
     }

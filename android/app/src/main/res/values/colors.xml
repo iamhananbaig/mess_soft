@@ -1,13 +1,24 @@
 <resources>
-    <color name="bg">#F4F4F5</color>
+    <!-- Matches the web app: blue-700 primary, emerald accent, cool greys. -->
+    <color name="bg">#F2F3F7</color>
     <color name="surface">#FFFFFF</color>
-    <color name="text">#18181B</color>
-    <color name="muted">#71717A</color>
-    <color name="border">#E4E4E7</color>
-    <color name="primary">#15803D</color>
-    <color name="primary_dark">#166534</color>
-    <color name="primary_soft">#DCFCE7</color>
-    <color name="danger">#B91C1C</color>
+    <color name="text">#1A1C2B</color>
+    <color name="muted">#5F6378</color>
+    <color name="border">#E3E5EC</color>
+    <color name="pressed">#EBEDF3</color>
+    <color name="primary">#1447E6</color>
+    <color name="primary_dark">#193CB8</color>
+    <color name="primary_soft">#E8EFFE</color>
+    <color name="success">#007A55</color>
+    <color name="success_soft">#E3F5EE</color>
+    <color name="danger">#C2261D</color>
+    <color name="danger_dark">#9B1C15</color>
+    <color name="danger_soft">#FBE9E7</color>
     <color name="warning">#B45309</color>
-    <color name="disabled">#D4D4D8</color>
+    <color name="warning_soft">#FDF1E2</color>
+    <color name="disabled">#D5D8E1</color>
+    <!-- The order ticket at the bottom of the POS screen. -->
+    <color name="ink">#1A1C2B</color>
+    <color name="ink_muted">#A9ADBF</color>
+    <color name="scrim">#801A1C2B</color>
 </resources>

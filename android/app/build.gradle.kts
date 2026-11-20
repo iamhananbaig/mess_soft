@@ -11,7 +11,7 @@ val signingProps = Properties().apply {
     file(path).takeIf { it.exists() }?.inputStream()?.use { load(it) }
 }
 
-val appVersionName = (findProperty("appVersionName") as String?) ?: "1.1"
+val appVersionName = (findProperty("appVersionName") as String?) ?: "1.2"
 
 /** 1.2.3 → 10203. Must only ever go up: Android refuses to install a lower versionCode. */
 fun versionCodeFor(name: String): Int {
